@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>Alfonso Sanchez Property Services</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F5F5F5;min-height:100vh;padding:1rem;}
+.app{max-width:420px;margin:0 auto;}
+.header{background:#fff;border-radius:14px;border:1px solid #E5E7EB;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+.header-title{font-size:15px;font-weight:600;color:#111;}
+.header-sub{font-size:12px;color:#888;margin-top:2px;}
+.header-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
+.lang-toggle{display:flex;border:1px solid #E5E7EB;border-radius:20px;overflow:hidden;}
+.lang-btn{padding:5px 13px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:#888;}
+.lang-btn.active{background:#111;color:#fff;}
+.nav-links{display:flex;gap:12px;}
+.nav-link{font-size:11px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
+.nav-link.orange{color:#D97706;}
+.chat-box{background:#fff;border-radius:14px;border:1px solid #E5E7EB;padding:1rem;min-height:300px;max-height:420px;overflow-y:auto;margin-bottom:1rem;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+.msg{max-width:88%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.5;}
+.msg.ai{background:#F3F4F6;color:#111;align-self:flex-start;border-bottom-left-radius:4px;}
+.msg.user{background:#1D9E75;color:#fff;align-self:flex-end;border-bottom-right-radius:4px;}
+.msg.error{background:#FEE2E2;color:#991B1B;align-self:flex-start;font-size:13px;}
+.input-row{display:flex;gap:8px;}
+.input-row input{flex:1;font-size:15px;padding:11px 15px;border-radius:12px;border:1px solid #E5E7EB;background:#fff;color:#111;outline:none;}
+.input-row input:focus{border-color:#1D9E75;}
+.send-btn{padding:11px 16px;border-radius:12px;border:1px solid #E5E7EB;background:#fff;color:#111;cursor:pointer;font-size:16px;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.chip{padding:8px 16px;border-radius:20px;border:1px solid #E5E7EB;background:#fff;color:#111;cursor:pointer;font-size:13px;font-weight:500;}
+.chip:active{transform:scale(0.97);}
+.chip.new{border-color:#1D9E75;color:#0F6E56;background:#F0FDF9;}
+.chip.warn{border-color:#F59E0B;color:#92400E;background:#FFFBEB;}
+.photo-section{background:#fff;border-radius:14px;border:1px solid #E5E7EB;padding:1rem;margin-top:1rem;}
+.photo-section h4{font-size:14px;font-weight:600;margin-bottom:10px;color:#111;}
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
+.photo-thumb{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;border:1px solid #E5E7EB;}
+.photo-thumb-wrap{position:relative;}
+.photo-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.6);border:none;color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.add-photo-btn{width:100%;padding:10px;border-radius:10px;border:1.5px dashed #D1D5DB;background:transparent;color:#888;cursor:pointer;font-size:13px;}
+.receipt-entry{background:#F9FAFB;border-radius:10px;padding:10px;margin-bottom:8px;border:1px solid #E5E7EB;}
+.receipt-entry-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.receipt-entry-header span{font-size:13px;font-weight:600;color:#111;}
+.del-receipt-btn{padding:3px 10px;border-radius:8px;border:1px solid #E5E7EB;background:#fff;color:#888;cursor:pointer;font-size:12px;}
+.invoice-preview{background:#fff;border-radius:14px;border:1px solid #E5E7EB;padding:1.25rem;margin-top:1rem;font-size:13px;line-height:1.8;color:#111;}
+.inv-label{color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;}
+.inv-sep{border:none;border-top:1px solid #F3F4F6;margin:10px 0;}
+.pdf-btn{width:100%;margin-top:10px;padding:12px;border-radius:12px;border:1.5px solid #1D9E75;background:#F0FDF9;color:#0F6E56;cursor:pointer;font-size:14px;font-weight:600;}
+.pdf-btn.mat{background:#FEFCE8;color:#854F0B;border-color:#F59E0B;}
+.text-btn{width:100%;margin-top:8px;padding:12px;border-radius:12px;border:1.5px solid #3B82F6;background:#EFF6FF;color:#1D4ED8;cursor:pointer;font-size:14px;font-weight:600;}
+.save-btn{width:100%;margin-top:8px;padding:12px;border-radius:12px;border:1.5px solid #9CA3AF;background:#F9FAFB;color:#374151;cursor:pointer;font-size:14px;font-weight:600;}
+.new-invoice-btn{width:100%;margin-top:1.5rem;padding:14px;border-radius:12px;border:none;background:#111;color:#fff;cursor:pointer;font-size:15px;font-weight:600;}
+.correct-btn{width:100%;margin-top:8px;padding:10px;border-radius:12px;border:1.5px solid #F59E0B;background:#FFFBEB;color:#92400E;cursor:pointer;font-size:13px;font-weight:500;}
+.tag{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-left:6px;}
+.tag.labor{background:#DCFCE7;color:#166534;}
+.tag.mat{background:#FEF9C3;color:#854F0B;}
+.loading-dots{display:inline-flex;gap:4px;align-items:center;padding:4px 0;}
+.loading-dots span{width:7px;height:7px;border-radius:50%;background:#9CA3AF;animation:bounce 1.2s infinite;}
+.loading-dots span:nth-child(2){animation-delay:0.2s;}
+.loading-dots span:nth-child(3){animation-delay:0.4s;}
+@keyframes bounce{0%,80%,100%{opacity:0.3;transform:scale(0.8);}40%{opacity:1;transform:scale(1);}}
+.retry-btn{width:100%;margin-top:6px;padding:9px;border-radius:10px;border:1px solid #FCA5A5;background:#FEF2F2;color:#DC2626;cursor:pointer;font-size:13px;}
+.mgr-panel{background:#fff;border-radius:14px;border:1px solid #E5E7EB;padding:1.25rem;margin-bottom:1rem;}
+.mgr-panel h3{font-size:15px;font-weight:600;margin-bottom:12px;}
+.client-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F3F4F6;}
+.client-row:last-child{border-bottom:none;}
+.client-info{font-size:13px;color:#111;font-weight:500;}
+.client-info span{display:block;font-size:11px;color:#888;}
+.del-btn{padding:5px 12px;border-radius:8px;border:1px solid #E5E7EB;background:#fff;color:#888;cursor:pointer;font-size:12px;}
+.back-btn{width:100%;margin-top:10px;padding:10px;border-radius:12px;border:1px solid #E5E7EB;background:#fff;color:#111;cursor:pointer;font-size:14px;}
+.incomplete-item{background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;}
+.incomplete-item:active{transform:scale(0.98);}
+.incomplete-title{font-size:13px;font-weight:600;color:#111;}
+.incomplete-sub{font-size:11px;color:#888;margin-top:2px;}
+input[type=file]{display:none;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div>
+      <div class="header-title">📄 Alfonso Sanchez Property Services</div>
+      <div class="header-sub">Invoice Assistant</div>
+    </div>
+    <div class="header-right">
+      <div class="lang-toggle">
+        <button class="lang-btn" id="btnES" onclick="setLang('es')">ES</button>
+        <button class="lang-btn active" id="btnEN" onclick="setLang('en')">EN</button>
+      </div>
+      <div class="nav-links">
+        <span class="nav-link orange" onclick="showIncomplete()">Uncompleted</span>
+        <span class="nav-link" onclick="showManager()">Clients</span>
+        <span class="nav-link" onclick="showAddressManager()">Addresses</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="managerPanel" style="display:none;">
+    <div class="mgr-panel"><h3 id="mgrTitle">Saved Clients</h3><div id="clientList"></div></div>
+    <button class="back-btn" onclick="hideManager()">← Back</button>
+  </div>
+
+  <div id="incompletePanel" style="display:none;">
+    <div class="mgr-panel">
+      <h3 id="incTitle">Uncompleted Invoices</h3>
+      <div id="incompleteList"></div>
+    </div>
+    <button class="back-btn" onclick="hideIncomplete()">← Back</button>
+  </div>
+
+  <div id="addressManagerPanel" style="display:none;">
+    <div class="mgr-panel">
+      <h3>Manage Addresses</h3>
+      <div style="margin-bottom:10px;">
+        <select id="addrClientSelect" onchange="renderAddressManager()" style="width:100%;padding:8px;border-radius:8px;border:1px solid #E5E7EB;font-size:13px;">
+          <option value="Andrew Whallon">Andrew Whallon</option>
+          <option value="Richard Baisz">Richard Baisz</option>
+          <option value="Gerry Baisz">Gerry Baisz</option>
+          <option value="Pravin Patel">Pravin Patel</option>
+        </select>
+      </div>
+      <div id="addressManagerList"></div>
+      <button class="add-photo-btn" style="margin-top:8px;" onclick="startAddressManagerAdd()">+ Add new address</button>
+    </div>
+    <button class="back-btn" onclick="hideAddressManager()">← Back</button>
+  </div>
+
+  <div id="mainPanel">
+    <div class="chat-box" id="chatBox"></div>
+    <div id="inputArea">
+      <div class="input-row">
+        <input type="text" id="userInput" placeholder="Type here..." autocomplete="off"/>
+        <button class="send-btn" onclick="sendMsg()">➤</button>
+      </div>
+      <div class="btn-row" id="chipArea"></div>
+      <button id="backBtn" onclick="goBack()" style="display:none;width:100%;margin-top:8px;padding:9px;border-radius:10px;border:1px solid #E5E7EB;background:transparent;color:#888;cursor:pointer;font-size:13px;">← Back</button>
+    </div>
+    <div id="photoSections" style="display:none;">
+      <div class="photo-section">
+        <h4 id="jobPhotoTitle">Job Photos (optional, max 8)</h4>
+        <div class="photo-grid" id="jobPhotoGrid"></div>
+        <button class="add-photo-btn" id="addJobPhotoBtn" onclick="triggerPhoto('job')">+ Add job photo</button>
+        <input type="file" id="jobPhotoInput" accept="image/*" capture="environment" onchange="handlePhoto('job',event)"/>
+      </div>
+      <div class="photo-section" id="receiptSection" style="display:none;">
+        <h4 id="receiptPhotoTitle">Receipt Photos</h4>
+        <div id="receiptList"></div>
+        <button class="add-photo-btn" id="addReceiptBtn" onclick="triggerPhoto('receipt')">+ Add receipt photo</button>
+        <input type="file" id="receiptPhotoInput" accept="image/*" capture="environment" onchange="handlePhoto('receipt',event)"/>
+      </div>
+    </div>
+    <div id="invoiceArea"></div>
+  </div>
+</div>
+
+<script>
+const {jsPDF}=window.jspdf;
+
+const BPLW_PARTNERS=[
+  {name:"Andrew Whallon",email:"andywhallon@yahoo.com",phone:"562-882-8632"},
+  {name:"Richard Baisz",email:"baisz@sbcglobal.net",phone:"310-809-3856"},
+  {name:"Gerry Baisz",email:"gerrybaisz@me.com",phone:"310-963-7322"},
+  {name:"Pravin Patel",email:"mfi123@hotmail.com",phone:"310-426-2936"}
+];
+
+// Per-client address database
+const ANDREW_ADDRESSES = [
+  {id:"sf58", display:"3265 Santa Fe Ave Unit 58", full:"3265 Santa Fe Ave Unit 58, Long Beach CA 90810"},
+  {id:"sf112", display:"3325 Santa Fe Ave Unit 112", full:"3325 Santa Fe Ave Unit 112, Long Beach CA 90810"},
+  {id:"sf118", display:"3325 Santa Fe Ave Unit 118", full:"3325 Santa Fe Ave Unit 118, Long Beach CA 90810"},
+  {id:"sf18", display:"3365 Santa Fe Ave Unit 18", full:"3365 Santa Fe Ave Unit 18, Long Beach CA 90810"},
+  {id:"sf22", display:"3345 Santa Fe Ave Unit 22", full:"3345 Santa Fe Ave Unit 22, Long Beach CA 90810"},
+  {id:"sf74", display:"3385 Santa Fe Ave Unit 74", full:"3385 Santa Fe Ave Unit 74, Long Beach CA 90810"},
+  {id:"sf87", display:"3365 Santa Fe Ave Unit 87", full:"3365 Santa Fe Ave Unit 87, Long Beach CA 90810"},
+  {id:"sf98", display:"3345 Santa Fe Ave Unit 98", full:"3345 Santa Fe Ave Unit 98, Long Beach CA 90810"},
+  {id:"sf102", display:"3345 Santa Fe Ave Unit 102", full:"3345 Santa Fe Ave Unit 102, Long Beach CA 90810"},
+  {id:"sf124", display:"3301 Santa Fe Ave Unit 124", full:"3301 Santa Fe Ave Unit 124, Long Beach CA 90810"},
+  {id:"linden69", display:"5050 Linden Ave Unit 69", full:"5050 Linden Ave Unit 69, Long Beach CA 90805"},
+  {id:"linden80", display:"5050 Linden Ave Unit 80", full:"5050 Linden Ave Unit 80, Long Beach CA 90805"},
+  {id:"linden83", display:"5050 Linden Ave Unit 83", full:"5050 Linden Ave Unit 83, Long Beach CA 90805"},
+  {id:"linden84", display:"5050 Linden Ave Unit 84", full:"5050 Linden Ave Unit 84, Long Beach CA 90805"},
+  {id:"linden104", display:"5050 Linden Ave Unit 104", full:"5050 Linden Ave Unit 104, Long Beach CA 90805"},
+  {id:"cherry102", display:"1001 Cherry Ave Unit 102", full:"1001 Cherry Ave Unit 102, Long Beach CA 90813"},
+  {id:"cherry202", display:"1001 Cherry Ave Unit 202", full:"1001 Cherry Ave Unit 202, Long Beach CA 90813"},
+  {id:"cherry204", display:"1001 Cherry Ave Unit 204", full:"1001 Cherry Ave Unit 204, Long Beach CA 90813"},
+  {id:"caspian1952", display:"1952 Caspian Ave", full:"1952 Caspian Ave, Long Beach CA 90810"},
+  {id:"caspian1954", display:"1954 Caspian Ave", full:"1954 Caspian Ave, Long Beach CA 90810"},
+  {id:"caspian1970", display:"1970 Caspian Ave", full:"1970 Caspian Ave, Long Beach CA 90810"},
+  {id:"canal1993", display:"1993 Canal Ave", full:"1993 Canal Ave, Long Beach CA 90810"},
+  {id:"canal1995", display:"1995 Canal Ave", full:"1995 Canal Ave, Long Beach CA 90810"}
+];
+
+function getClientAddressKey(clientName){
+  return "addresses_" + clientName.toLowerCase().replace(/\s+/g,"_");
+}
+
+function getClientAddresses(clientName){
+  if(clientName==="Andrew Whallon"){
+    // Merge preloaded + any saved additions
+    try{
+      const saved=JSON.parse(localStorage.getItem(getClientAddressKey(clientName))||"[]");
+      return [...ANDREW_ADDRESSES, ...saved];
+    }catch(e){return ANDREW_ADDRESSES;}
+  }
+  try{return JSON.parse(localStorage.getItem(getClientAddressKey(clientName))||"[]");}
+  catch(e){return[];}
+}
+
+function saveClientAddress(clientName, addr){
+  const key=getClientAddressKey(clientName);
+  let existing=[];
+  try{existing=JSON.parse(localStorage.getItem(key)||"[]");}catch(e){}
+  // Don't duplicate
+  if(!existing.find(a=>a.full===addr.full)){
+    existing.push(addr);
+    try{localStorage.setItem(key,JSON.stringify(existing));}catch(e){}
+  }
+}
+
+// New address collection state
+let newAddrState = null; // tracks multi-step address entry
+
+function startNewAddress(){
+  newAddrState = {step:"street_name", data:{}};
+  addAIMsg(t("¿Cuál es el nombre de la calle? (ej: Main Street)","What is the street name? (e.g. Main Street)"));
+  document.getElementById("chipArea").innerHTML="";
+}
+
+function handleNewAddressInput(text){
+  if(!newAddrState) return false;
+  const s = newAddrState.step;
+  if(s==="street_name"){
+    // Capitalize each word
+    let sn = text.trim().split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+    // Append Ave if no street type given
+    const hasType = /\b(ave|avenue|st|street|blvd|boulevard|dr|drive|rd|road|ln|lane|way|ct|court)\b/i.test(sn);
+    if(!hasType) sn = sn + ' Ave';
+    newAddrState.data.streetName=sn;
+    newAddrState.step="street_number";
+    addAIMsg(t("¿Cuál es el número de la calle?","What is the street number?"));
+    return true;
+  }
+  if(s==="street_number"){
+    newAddrState.data.streetNumber=text;
+    newAddrState.step="unit_yn";
+    addAIMsg(t("¿Hay número o letra de apartamento/unidad? Si sí, escríbelo directamente.","Is there a unit/apartment number? If yes, type it. If no, type No."));
+    showYesNoChips();
+    return true;
+  }
+  if(s==="unit_yn"){
+    const lower=text.toLowerCase().trim();
+    const isNo=lower==="no"||lower==="nope"||lower==="none"||lower==="n";
+    const isYes=lower==="yes"||lower==="sí"||lower==="si"||lower==="y";
+    // If they typed a number/letter directly, treat as the unit itself
+    const isDirectUnit=!isNo&&!isYes&&text.trim().length>0&&text.trim().length<10;
+    if(isNo){
+      newAddrState.data.unit="";
+      newAddrState.step="city";
+      addAIMsg(t("¿Cuál es la ciudad?","What is the city?"));
+    } else if(isYes){
+      newAddrState.step="unit_number";
+      addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the unit number or letter?"));
+    } else if(isDirectUnit){
+      // They typed the unit directly
+      newAddrState.data.unit=text.trim();
+      newAddrState.step="city";
+      addAIMsg(t("¿Cuál es la ciudad?","What is the city? (e.g. Long Beach)"));
+    } else {
+      newAddrState.step="unit_number";
+      addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the unit number or letter?"));
+    }
+    return true;
+  }
+  if(s==="unit_number"){
+    newAddrState.data.unit=text;
+    newAddrState.step="city";
+    addAIMsg(t("¿Cuál es la ciudad?","What is the city?"));
+    return true;
+  }
+  if(s==="city"){
+    newAddrState.data.city=text;
+    newAddrState.step="zip";
+    addAIMsg(t("¿Cuál es el código postal?","What is the zip code?"));
+    return true;
+  }
+  if(s==="zip"){
+    newAddrState.data.zip=text;
+    // Build full address
+    const d=newAddrState.data;
+    const unitPart=(d.unit&&d.unit.trim())?` Unit ${d.unit.trim()}`:"";
+    const full=`${d.streetNumber.trim()} ${d.streetName.trim()}${unitPart}, ${d.city.trim()} ${d.zip.trim()}`;
+    const display=`${d.streetNumber.trim()} ${d.streetName.trim()}${unitPart}`;
+    const addr={id:"custom_"+Date.now(), display, full};
+    const clientName = currentOrderedBy || "Unknown";
+    saveClientAddress(clientName, addr);
+    newAddrState=null;
+    addAIMsg(`Address saved: ${full}`);
+    lastUserText=full;
+    addUserMsg(full);
+    callClaude(full, false);
+    return true;
+  }
+  // Handle field edit
+  if(s==="edit_field"){
+    const d=newAddrState.data;
+    const field=d.field;
+    let val=text.trim();
+    if(field==="streetName"){
+      val=val.split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+      const hasType=/\b(ave|avenue|st|street|blvd|boulevard|dr|drive|rd|road|ln|lane|way|ct|court)\b/i.test(val);
+      if(!hasType) val=val+' Ave';
+      d.streetName=val;
+    } else if(field==="streetNum") d.streetNum=val;
+    else if(field==="unit") d.unit=(val.toLowerCase()==="none"?"":val);
+    else if(field==="city") d.city=val;
+    else if(field==="zip") d.zip=val;
+    // Save updated address
+    const unitPart=(d.unit&&d.unit.trim())?` Unit ${d.unit.trim()}`:"";
+    const full=`${d.streetNum} ${d.streetName}${unitPart}, ${d.city} ${d.zip}`;
+    const display=`${d.streetNum} ${d.streetName}${unitPart}`;
+    const newAddr={id:"custom_"+Date.now(), display, full};
+    // Update in saved list
+    try{
+      const saved=JSON.parse(localStorage.getItem(editingAddressKey)||"[]");
+      saved[editingAddressIdx]=newAddr;
+      localStorage.setItem(editingAddressKey,JSON.stringify(saved));
+      editingAddressData={...d};
+    }catch(e){}
+    newAddrState=null;
+    addAIMsg(`Updated: ${full}\n\nWant to change anything else?`);
+    editingAddressData.streetName=d.streetName;
+    editingAddressData.streetNum=d.streetNum;
+    editingAddressData.unit=d.unit;
+    editingAddressData.city=d.city;
+    editingAddressData.zip=d.zip;
+    showAddressEditChips();
+    return true;
+  }
+  return false;
+}
+
+let lang="en";
+let messages=[];
+let invoiceData=null;
+let lastUserText="";
+let lastStreet="";
+let currentOrderedBy="";
+let invoiceType="both"; // 'labor', 'materials', 'both'
+let laborNum=parseInt(localStorage.getItem("laborNum")||"10001");
+let matNum=parseInt(localStorage.getItem("matNum")||"20001");
+let savedClients=loadClients();
+let incompleteInvoices=loadIncomplete();
+let jobPhotos=[];
+let receipts=[];
+
+function loadClients(){try{return JSON.parse(localStorage.getItem("alfonso_clients")||"[]");}catch(e){return[];}}
+function saveClients(){try{localStorage.setItem("alfonso_clients",JSON.stringify(savedClients));}catch(e){}}
+function addClient(c){if(!savedClients.find(x=>x.name.toLowerCase()===c.name.toLowerCase())){savedClients.push(c);saveClients();}}
+function loadIncomplete(){try{return JSON.parse(localStorage.getItem("alfonso_incomplete")||"[]");}catch(e){return[];}}
+function saveIncomplete(){try{localStorage.setItem("alfonso_incomplete",JSON.stringify(incompleteInvoices));}catch(e){}}
+function saveLaborNum(){try{localStorage.setItem("laborNum",String(laborNum));}catch(e){}}
+function saveMatNum(){try{localStorage.setItem("matNum",String(matNum));}catch(e){}}
+
+function t(es,en){return lang==="es"?es:en;}
+
+function getSystemPrompt(){
+  const clientList=savedClients.length
+    ?savedClients.map((c,i)=>`${i+1}. ${c.name} | ${c.address} | ${c.email}${c.phone?" | "+c.phone:""}`).join("\n")
+    :"None saved yet.";
+
+  const invoiceTypeDesc = invoiceType==="labor"
+    ? "This is a LABOR ONLY invoice. Do not ask about materials."
+    : invoiceType==="materials"
+    ? "This is a MATERIALS ONLY invoice. Do not ask about labor tasks."
+    : "This invoice covers BOTH labor and materials.";
+
+  return `You are a billing assistant for Alfonso Sanchez Property Services. English only. Brief. ONE question at a time.
+
+${invoiceTypeDesc}
+
+CONTRACTOR: Alfonso Sanchez Property Services, 310 Main Ave Apt 1, Long Beach CA 90802, Phone: 562-533-7907
+
+TYPE 1 — BPLW Management, PO Box 9395, Long Beach CA 90810
+- Andrew Whallon | andywhallon@yahoo.com | 562-882-8632
+- Richard Baisz | baisz@sbcglobal.net | 310-809-3856
+- Gerry Baisz | gerrybaisz@me.com | 310-963-7322
+- Pravin Patel | mfi123@hotmail.com | 310-426-2936
+
+TYPE 2 — Saved external clients:
+${clientList}
+If new client: collect name, address, email, phone.
+
+JOB ADDRESS: The app will provide the full job address directly. Use it exactly as provided.
+
+FLOW — ONE question at a time:
+1. BPLW Management or different client?
+2. Which partner ordered? You may list the partner names for clarity.
+3. Ask for the job address. Do NOT list addresses or streets in your response — just ask "Which address was the job at?" The app will show address buttons.
+${invoiceType!=="materials"?`5. What work did you perform? Ask ONE TASK AT A TIME: "What was the first task and price?" then "Any other tasks? If yes, what and how much?" Repeat until done.`:""}
+${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase materials? Ask ONE RECEIPT AT A TIME: "Where did you buy it and how much?" then "Any other receipts?" Repeat until done.`:""}
+${invoiceType==="both"?"7":"6"}. Date work was completed?
+${invoiceType==="both"?"8":"7"}. Confirm all details. Show the full built address. If anything needs correction, say "Please tell me what to fix."
+
+CORRECTION HANDLING: If user says something needs fixing, list the collected fields as a numbered menu and ask which to change. Then:
+- If they pick Client, Ordered by, Street, Unit, or Date: ask only that specific question again
+- If they pick Work items/tasks: list ALL existing tasks with numbers (e.g. "1. Replace ceiling fan - $110  2. Paint ceiling - $480") and ask "Which task number do you want to change, or type 'add' to add a new task?"
+- If they pick a specific task number: ask "What should task [N] be? Give me the description and price."
+- Make only the requested change, keep everything else the same.
+
+When you have EVERYTHING respond ONLY with valid JSON:
+{"done":true,"client_type":"bplw","bill_to_name":"BPLW Management","bill_to_address":"PO Box 9395, Long Beach CA 90810","bill_to_email":"EMAIL","bill_to_phone":"PHONE","ordered_by":"NAME","job_address":"FULL ADDRESS","work_items":[{"desc":"x","amount":0}],"materials_items":[{"desc":"x","amount":0}],"date":"DATE","has_materials":${invoiceType!=="labor"},"has_labor":${invoiceType!=="materials"},"new_client":null}`;
+}
+
+function setLang(l){
+  lang=l;
+  document.getElementById("btnES").classList.toggle("active",l==="es");
+  document.getElementById("btnEN").classList.toggle("active",l==="en");
+  document.getElementById("userInput").placeholder=t("Escribe aquí...","Type here...");
+  resetChat();
+}
+
+function showManager(){
+  document.getElementById("managerPanel").style.display="block";
+  document.getElementById("mainPanel").style.display="none";
+  document.getElementById("incompletePanel").style.display="none";
+  renderClientList();
+}
+function hideManager(){
+  document.getElementById("managerPanel").style.display="none";
+  document.getElementById("mainPanel").style.display="block";
+}
+function showIncomplete(){
+  document.getElementById("incompletePanel").style.display="block";
+  document.getElementById("mainPanel").style.display="none";
+  document.getElementById("managerPanel").style.display="none";
+  renderIncompleteList();
+}
+function hideIncomplete(){
+  document.getElementById("incompletePanel").style.display="none";
+  document.getElementById("mainPanel").style.display="block";
+}
+function renderClientList(){
+  const el=document.getElementById("clientList");
+  if(!savedClients.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">No saved clients yet.</div>`;return;}
+  el.innerHTML=savedClients.map((c,i)=>`<div class="client-row"><div class="client-info">${c.name}<span>${c.address}</span><span>${c.email}${c.phone?" · "+c.phone:""}</span></div><button class="del-btn" onclick="deleteClient(${i})">Delete</button></div>`).join("");
+}
+function deleteClient(i){savedClients.splice(i,1);saveClients();renderClientList();}
+function renderIncompleteList(){
+  const el=document.getElementById("incompleteList");
+  if(!incompleteInvoices.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">No uncompleted invoices.</div>`;return;}
+  el.innerHTML=incompleteInvoices.map((inv,i)=>`
+    <div class="incomplete-item" onclick="continueIncomplete(${i})">
+      <div class="incomplete-title">Materials — ${inv.job_address||"Job TBD"}</div>
+      <div class="incomplete-sub">${inv.receipts_count||0} receipt(s) · ${inv.date||"Date TBD"} · Tap to continue</div>
+    </div>`).join("");
+}
+function continueIncomplete(i){
+  const inv=incompleteInvoices[i];
+  hideIncomplete();
+  // Restore state and go straight to receipt adding
+  invoiceData=inv.invoiceData;
+  receipts=inv.receipts||[];
+  invoiceType="materials";
+  document.getElementById("photoSections").style.display="block";
+  document.getElementById("receiptSection").style.display="block";
+  renderReceipts();
+  showInvoicePreview(invoiceData);
+  addAIMsg(`Continuing materials invoice for ${inv.job_address}. Add more receipts or generate the PDF.`);
+}
+
+function resetChat(){
+  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;showBackBtn(false);
+  document.getElementById("chatBox").innerHTML="";
+  document.getElementById("chipArea").innerHTML="";
+  document.getElementById("invoiceArea").innerHTML="";
+  document.getElementById("photoSections").style.display="none";
+  document.getElementById("jobPhotoGrid").innerHTML="";
+  document.getElementById("receiptList").innerHTML="";
+  document.getElementById("receiptSection").style.display="none";
+  addAIMsg(t("¡Hola Alfonso! ¿Qué tipo de factura necesitas?","Hi Alfonso! What type of invoice do you need?"));
+  showInvoiceTypeChips();
+}
+
+function showInvoiceTypeChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  [
+    {label:t("Trabajo y Materiales","Labor + Materials"),val:"both"},
+    {label:t("Solo Trabajo","Labor Only"),val:"labor"},
+    {label:t("Solo Materiales","Materials Only"),val:"materials"}
+  ].forEach(o=>{
+    const chip=document.createElement("div");
+    chip.className="chip"+(o.val==="materials"?" warn":"");
+    chip.textContent=o.label;
+    chip.onclick=()=>{
+      invoiceType=o.val;
+      convStage="client_type";
+      area.innerHTML="";
+      document.getElementById("userInput").value=o.label;
+      sendMsg();
+    };
+    area.appendChild(chip);
+  });
+}
+
+function showClientTypeChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  ["BPLW Management",t("Otro cliente","Different client")].forEach((o,i)=>{
+    const chip=document.createElement("div");
+    chip.className="chip"+(i===1?" new":"");chip.textContent=o;
+    chip.onclick=()=>{
+      convStage="partner";
+      area.innerHTML="";
+      document.getElementById("userInput").value=o;
+      sendMsg();
+    };
+    area.appendChild(chip);
+  });
+}
+function showPartnerChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  BPLW_PARTNERS.forEach(p=>{
+    const chip=document.createElement("div");chip.className="chip";chip.textContent=p.name;
+    chip.onclick=()=>{
+      currentOrderedBy=p.name;
+      convStage="street";
+      area.innerHTML="";
+      document.getElementById("userInput").value=p.name;
+      sendMsg();
+    };
+    area.appendChild(chip);
+  });
+}
+function showSavedClientChips(){
+  if(!savedClients.length)return;
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  savedClients.forEach(c=>{
+    const chip=document.createElement("div");chip.className="chip";chip.textContent=c.name;
+    chip.onclick=()=>{document.getElementById("userInput").value=c.name;sendMsg();};
+    area.appendChild(chip);
+  });
+  const nc=document.createElement("div");nc.className="chip new";nc.textContent=t("+ Nuevo cliente","+ New client");
+  nc.onclick=()=>{document.getElementById("userInput").value=t("Nuevo cliente","New client");sendMsg();};
+  area.appendChild(nc);
+}
+function showAddressChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const addresses=getClientAddresses(currentOrderedBy);
+  addresses.forEach(addr=>{
+    const chip=document.createElement("div");chip.className="chip";
+    chip.textContent=addr.display;
+    chip.onclick=()=>{
+      area.innerHTML="";
+      convStage="tasks";
+      document.getElementById("userInput").value=addr.full;
+      sendMsg();
+    };
+    area.appendChild(chip);
+  });
+  // Add new address option
+  const addChip=document.createElement("div");addChip.className="chip new";
+  addChip.textContent=t("+ Nueva dirección","+ Add new address");
+  addChip.onclick=()=>{
+    area.innerHTML="";
+    newAddrState={step:"street_name",data:{}};
+    addAIMsg(t("¿Cuál es el nombre de la calle? (ej: Main Street)","What is the street name? (e.g. Main Street)"));
+  };
+  area.appendChild(addChip);
+}
+
+function showStreetChips(){showAddressChips();}
+function showUnitChips(street){showAddressChips();}
+function showYesNoChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  [t("Sí","Yes"),t("No","No")].forEach(o=>{
+    const chip=document.createElement("div");chip.className="chip";chip.textContent=o;
+    chip.onclick=()=>{document.getElementById("userInput").value=o;sendMsg();};
+    area.appendChild(chip);
+  });
+}
+
+async function callClaude(userText,isRetry){
+  if(!isRetry) messages.push({role:"user",content:userText});
+  showTyping();
+  document.getElementById("chipArea").innerHTML="";
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      if(attempt>0) await new Promise(r=>setTimeout(r,5000*attempt));
+      const controller=new AbortController();
+      const timeoutId=setTimeout(()=>controller.abort(),45000);
+      const res=await fetch("https://alfonso-invoice-api.onrender.com/api/chat",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1500,system:getSystemPrompt(),messages}),
+        signal:controller.signal
+      });
+      clearTimeout(timeoutId);
+      if(!res.ok){const err=await res.json().catch(()=>({}));if(res.status===429||res.status===529){await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw new Error(err.error?.message||`HTTP ${res.status}`);}
+      const data=await res.json();
+      removeTyping();
+      const reply=data.content[0].text;
+      messages.push({role:"assistant",content:reply});
+      try{
+        const jm=reply.match(/\{[\s\S]*"done"\s*:\s*true[\s\S]*\}/);
+        if(jm){
+          invoiceData=JSON.parse(jm[0]);
+          if(invoiceData.new_client&&invoiceData.new_client.name) addClient(invoiceData.new_client);
+          showPhotoSections();
+          showInvoicePreview(invoiceData);
+          addAIMsg(t("✅ ¡Listo! Agrega fotos si quieres, luego genera el PDF.","✅ Done! Add any photos, then generate your PDF."));
+          return;
+        }
+        // Check if AI is asking for confirmation — show formatted summary instead
+        if(reply.toLowerCase().includes("confirm") || reply.toLowerCase().includes("everything correct") || reply.toLowerCase().includes("need to be fixed") || reply.toLowerCase().includes("confirmar")){
+          // Try to extract data from conversation and show formatted summary
+          showFormattedSummary(reply);
+          setTimeout(()=>showConfirmChips(), 100);
+          return;
+        }
+      }catch(e){}
+      addAIMsg(reply);
+      setTimeout(()=>smartChips(reply), 100);
+      return;
+    }catch(e){if(attempt===2){removeTyping();showError(e.message||"Connection failed");return;}}
+  }
+}
+
+function showError(msg){
+  const box=document.getElementById("chatBox");
+  const d=document.createElement("div");d.className="msg error";d.textContent=t("Error. Toca Reintentar.","Connection error. Tap Retry.");
+  box.appendChild(d);
+  const btn=document.createElement("button");btn.className="retry-btn";btn.textContent=t("↺ Reintentar","↺ Retry");
+  btn.onclick=()=>{btn.remove();d.remove();callClaude(lastUserText,true);};
+  box.appendChild(btn);box.scrollTop=box.scrollHeight;
+}
+
+// Conversation stage tracker
+let convStage = "invoice_type";
+
+function setChips(stage, extra){
+  const area = document.getElementById("chipArea");
+  area.innerHTML = "";
+  convStage = stage;
+  showBackBtn(stage !== "invoice_type");
+  if(stage==="invoice_type") showInvoiceTypeChips();
+  else if(stage==="client_type") showClientTypeChips();
+  else if(stage==="partner") showPartnerChips();
+  else if(stage==="street") showStreetChips();
+  else if(stage==="unit") showUnitChips(extra||lastStreet||"Santa Fe Ave");
+  else if(stage==="confirm") showConfirmChips();
+  else if(stage==="correction") showNumberChips(extra||7);
+  else if(stage==="yesno") showYesNoChips();
+  // else: clear (tasks, date, materials, etc.)
+}
+
+function smartChips(reply){
+  const lower = reply.toLowerCase();
+  const area = document.getElementById("chipArea");
+
+  // Always clear first
+  area.innerHTML = "";
+
+  // Confirmation
+  if(lower.includes("everything correct")||lower.includes("need to be fixed")||lower.includes("todo correcto")||lower.includes("is everything")||lower.includes("look correct")){
+    setChips("confirm"); return;
+  }
+  // Correction field list
+  if(lower.includes("which number")||lower.includes("number would you like")||lower.includes("please tell me the number")||lower.includes("fields i've collected")||lower.includes("what needs to be fixed")||lower.includes("which number do you want")||lower.includes("number do you want to change")){
+    const nums=(lower.match(/\d+\./g)||[]).length||6;
+    convStage="correction";
+    showNumberChips(nums); return;
+  }
+  // Invoice type — only trigger on the question, not confirmations
+  if((lower.includes("type of invoice")||lower.includes("tipo de factura")||lower.includes("what type")||(lower.includes("labor")&&lower.includes("materials")&&lower.includes("only")))&&(lower.includes("?")||lower.includes("need"))){
+    if(convStage==="invoice_type"){setChips("invoice_type"); return;}
+  }
+  // Client type
+  if((lower.includes("bplw management")||lower.includes("bplw")) && (lower.includes("different client")||lower.includes("otro cliente")||lower.includes("or a different"))){
+    setChips("client_type"); return;
+  }
+  // Partner
+  if(lower.includes("which partner")||lower.includes("andrew whallon")&&lower.includes("richard")){
+    setChips("partner"); return;
+  }
+  // Job address / location question
+  if(lower.includes("which address")||lower.includes("which street")||lower.includes("what street")||lower.includes("street is the job")||lower.includes("street was the work")||lower.includes("job location")||lower.includes("job address")||lower.includes("where was the job")||lower.includes("location of the job")||lower.includes("address was the job")||lower.includes("address of the job")){
+    setChips("street"); return;
+  }
+  // Yes/No
+  if(lower.includes("another task")||lower.includes("any other task")||lower.includes("another receipt")||lower.includes("any other receipt")||lower.includes("otra tarea")||lower.includes("otro recibo")){
+    setChips("yesno"); return;
+  }
+  // Send now / save
+  if(lower.includes("send now")||lower.includes("save for later")||lower.includes("enviar ahora")){
+    [t("Send now","Send now"),t("Save for later","Save for later")].forEach(o=>{
+      const chip=document.createElement("div");chip.className="chip";chip.textContent=o;
+      chip.onclick=()=>{area.innerHTML="";document.getElementById("userInput").value=o;sendMsg();};
+      area.appendChild(chip);
+    });
+    return;
+  }
+  // Default: clear chips (tasks, date, free text stages)
+  if(newAddrState||editingAddressData) return; // Don't override address flow chips
+  area.innerHTML="";
+}
+
+function showNumberChips(count){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const n=typeof count==="number"?count:6;
+  // Find which number corresponds to work items by checking last AI message
+  const msgs=document.querySelectorAll(".msg.ai");
+  const lastMsg=msgs[msgs.length-1]?msgs[msgs.length-1].textContent:"";
+  const workNum=findWorkItemsNumber(lastMsg);
+  const matNum=findMaterialsNumber(lastMsg);
+  for(let i=1;i<=Math.min(n,9);i++){
+    const chip=document.createElement("div");chip.className="chip";chip.textContent=String(i);
+    chip.onclick=(function(num){return function(){
+      area.innerHTML="";
+      if(num===workNum && invoiceData && invoiceData.work_items && invoiceData.work_items.length>0){
+        showTaskCorrectionChips();
+      } else if(num===matNum && invoiceData && invoiceData.materials_items && invoiceData.materials_items.length>0){
+        showMaterialCorrectionChips();
+      } else {
+        document.getElementById("userInput").value=String(num);
+        sendMsg();
+      }
+    };})(i);
+    area.appendChild(chip);
+  }
+}
+
+function findWorkItemsNumber(text){
+  const lines=text.split("\n");
+  for(const line of lines){
+    if(/work|task|labor/i.test(line)){
+      const m=line.match(/^(\d+)\./);
+      if(m) return parseInt(m[1]);
+    }
+  }
+  return 4; // default
+}
+
+function findMaterialsNumber(text){
+  const lines=text.split("\n");
+  for(const line of lines){
+    if(/material/i.test(line)){
+      const m=line.match(/^(\d+)\./);
+      if(m) return parseInt(m[1]);
+    }
+  }
+  return 5; // default
+}
+
+function showTaskCorrectionChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const items=invoiceData.work_items;
+  const taskList=items.map((item,i)=>`${i+1}. ${item.desc} — $${parseFloat(item.amount).toFixed(2)}`).join("\n");
+  addAIMsg("Which task needs to change?\n"+taskList);
+  items.forEach((item,i)=>{
+    const chip=document.createElement("div");chip.className="chip warn";
+    chip.textContent=`Task ${i+1}`;
+    chip.onclick=(function(idx,t){return function(){
+      area.innerHTML="";
+      addAIMsg(`Editing: "${t.desc} — $${parseFloat(t.amount).toFixed(2)}"\nWhat should it be? (description and price)`);
+      messages.push({role:"assistant",content:`User wants to edit task ${idx}: "${t.desc}" at $${t.amount}. Ask for new description and price for this task only. Keep all other data unchanged. When done, output the full invoice JSON.`});
+      convStage="task_edit";
+    };})(i+1,item);
+    area.appendChild(chip);
+  });
+  const addChip=document.createElement("div");addChip.className="chip new";addChip.textContent="+ Add task";
+  addChip.onclick=()=>{area.innerHTML="";document.getElementById("userInput").value="add new task";sendMsg();};
+  area.appendChild(addChip);
+}
+
+function showMaterialCorrectionChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const items=invoiceData.materials_items;
+  const list=items.map((item,i)=>`${i+1}. ${item.desc} — $${parseFloat(item.amount).toFixed(2)}`).join("\n");
+  addAIMsg("Which material entry needs to change?\n"+list);
+  items.forEach((item,i)=>{
+    const chip=document.createElement("div");chip.className="chip warn";
+    chip.textContent=`Item ${i+1}`;
+    chip.onclick=(function(idx,t){return function(){
+      area.innerHTML="";
+      addAIMsg(`Editing: "${t.desc} — $${parseFloat(t.amount).toFixed(2)}"\nWhat should it be?`);
+      messages.push({role:"assistant",content:`User wants to edit material item ${idx}: "${t.desc}" at $${t.amount}. Ask for new description and price. Keep all other data unchanged. When done, output the full invoice JSON.`});
+      convStage="task_edit";
+    };})(i+1,item);
+    area.appendChild(chip);
+  });
+  const addChip=document.createElement("div");addChip.className="chip new";addChip.textContent="+ Add receipt";
+  addChip.onclick=()=>{area.innerHTML="";document.getElementById("userInput").value="add new material";sendMsg();};
+  area.appendChild(addChip);
+}
+
+function showConfirmChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const chip1=document.createElement("div");chip1.className="chip new";chip1.textContent=t("✅ Todo correcto","✅ Everything's correct");
+  chip1.onclick=()=>{document.getElementById("userInput").value=t("Todo correcto","Everything is correct");sendMsg();};
+  const chip2=document.createElement("div");chip2.className="chip warn";chip2.textContent=t("✏️ Corregir algo","✏️ Fix something");
+  chip2.onclick=()=>{document.getElementById("userInput").value=t("Necesito corregir algo","I need to fix something");sendMsg();};
+  area.appendChild(chip1);area.appendChild(chip2);
+}
+
+function showPhotoSections(){
+  document.getElementById("photoSections").style.display="block";
+  const hasMat=invoiceData&&(invoiceData.has_materials||invoiceType==="materials");
+  document.getElementById("receiptSection").style.display=hasMat?"block":"none";
+  const hasLabor=invoiceData&&(invoiceData.has_labor||invoiceType==="labor"||invoiceType==="both");
+  document.getElementById("jobPhotoTitle").textContent=t("Fotos del trabajo (máx 8, opcional)","Job Photos (optional, max 8)");
+  if(!hasLabor) document.getElementById("photoSections").querySelector('.photo-section').style.display="none";
+}
+function triggerPhoto(type){document.getElementById(type==="job"?"jobPhotoInput":"receiptPhotoInput").click();}
+function handlePhoto(type,event){
+  const file=event.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const dataUrl=e.target.result;
+    if(type==="job"){if(jobPhotos.length>=8){alert("Max 8 photos.");return;}jobPhotos.push(dataUrl);renderJobPhotos();}
+    else{receipts.push({dataUrl});renderReceipts();}
+  };
+  reader.readAsDataURL(file);event.target.value="";
+}
+function renderJobPhotos(){
+  const grid=document.getElementById("jobPhotoGrid");grid.innerHTML="";
+  jobPhotos.forEach((src,i)=>{
+    const wrap=document.createElement("div");wrap.className="photo-thumb-wrap";
+    const img=document.createElement("img");img.className="photo-thumb";img.src=src;
+    const del=document.createElement("button");del.className="photo-del";del.textContent="×";
+    del.onclick=()=>{jobPhotos.splice(i,1);renderJobPhotos();};
+    wrap.appendChild(img);wrap.appendChild(del);grid.appendChild(wrap);
+  });
+  document.getElementById("addJobPhotoBtn").style.display=jobPhotos.length>=8?"none":"block";
+}
+function renderReceipts(){
+  const list=document.getElementById("receiptList");list.innerHTML="";
+  receipts.forEach((r,i)=>{
+    const div=document.createElement("div");div.className="receipt-entry";
+    const header=document.createElement("div");header.className="receipt-entry-header";
+    const label=document.createElement("span");label.textContent=`Receipt ${i+1}`;
+    const del=document.createElement("button");del.className="del-receipt-btn";del.textContent="Delete";
+    del.onclick=()=>{receipts.splice(i,1);renderReceipts();};
+    header.appendChild(label);header.appendChild(del);
+    const img=document.createElement("img");img.src=r.dataUrl;
+    img.style.cssText="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:4px;";
+    div.appendChild(header);div.appendChild(img);list.appendChild(div);
+  });
+}
+
+function stripMarkdown(text){return text.replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/#{1,6}\s/g,'').replace(/`([^`]+)`/g,'$1').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,'').trim();}
+function formatAIText(text){
+  // Add line breaks before numbered list items
+  return text
+    .replace(/\s+(\d+\.\s)/g, '\n$1')
+    .replace(/:\s+(\d+\.\s)/g, ':\n$1')
+    .trim();
+}
+function addAIMsg(text){
+  const box=document.getElementById("chatBox");
+  const d=document.createElement("div");
+  d.className="msg ai";
+  d.style.whiteSpace="pre-line";
+  d.textContent=formatAIText(stripMarkdown(text));
+  box.appendChild(d);
+  box.scrollTop=box.scrollHeight;
+}
+function addUserMsg(text){const box=document.getElementById("chatBox");const d=document.createElement("div");d.className="msg user";d.textContent=text;box.appendChild(d);box.scrollTop=box.scrollHeight;}
+function showTyping(){const box=document.getElementById("chatBox");const d=document.createElement("div");d.className="msg ai";d.id="typingIndicator";d.innerHTML='<div class="loading-dots"><span></span><span></span><span></span></div>';box.appendChild(d);box.scrollTop=box.scrollHeight;}
+function removeTyping(){const el=document.getElementById("typingIndicator");if(el)el.remove();}
+// Stage order for back navigation
+const STAGE_ORDER = ["invoice_type","client_type","partner","street","unit","tasks","confirm"];
+const STAGE_PREV = {
+  "client_type":"invoice_type",
+  "partner":"client_type", 
+  "street":"partner",
+  "tasks":"street",
+  "confirm":"tasks"
+};
+
+function showBackBtn(show){
+  const btn=document.getElementById("backBtn");
+  if(btn) btn.style.display=show?"block":"none";
+}
+
+function goBack(){
+  if(messages.length < 2) return;
+  // Remove last user message and last AI message
+  messages.splice(-2, 2);
+  // Remove last two chat bubbles
+  const box=document.getElementById("chatBox");
+  const bubbles=box.querySelectorAll(".msg");
+  const toRemove=Math.min(2, bubbles.length);
+  for(let i=0;i<toRemove;i++) bubbles[bubbles.length-1-i].remove();
+  // Go back one stage
+  const prev=STAGE_PREV[convStage]||"invoice_type";
+  // Reset relevant state
+  if(convStage==="street"||convStage==="tasks") currentOrderedBy="";
+  setChips(prev);
+  convStage=prev;
+  if(prev==="invoice_type") showBackBtn(false);
+}
+
+function sendMsg(){
+  const inp=document.getElementById("userInput");const text=inp.value.trim();if(!text)return;
+  lastUserText=text;
+  // Handle new address flow
+  if(newAddrState){
+    addUserMsg(text);inp.value="";
+    handleNewAddressInput(text);
+    return;
+  }
+  addUserMsg(text);inp.value="";callClaude(text,false);
+}
+document.getElementById("userInput").addEventListener("keydown",e=>{if(e.key==="Enter")sendMsg();});
+
+function fmt(n){return"$"+parseFloat(n).toFixed(2);}
+
+function showInvoicePreview(d){
+  const area=document.getElementById("invoiceArea");
+  const laborTotal=(d.work_items||[]).reduce((s,i)=>s+parseFloat(i.amount),0);
+  const matTotal=(d.materials_items||[]).reduce((s,i)=>s+parseFloat(i.amount),0);
+  const showLabor=d.has_labor||invoiceType==="labor"||invoiceType==="both";
+  const showMat=(d.has_materials||invoiceType==="materials"||invoiceType==="both")&&d.materials_items&&d.materials_items.length>0;
+  let html="";
+
+  if(showLabor&&d.work_items&&d.work_items.length>0){
+    html+=`<div class="invoice-preview">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Labor <span class="tag labor">Labor</span></h3>
+      <div style="font-size:12px;color:#888;">#${laborNum} &nbsp;·&nbsp; ${d.date}</div>
+      <hr class="inv-sep">
+      <div class="inv-label">From</div><div>Alfonso Sanchez Property Services<br>310 Main Ave Apt 1, Long Beach CA 90802<br>562-533-7907</div>
+      <hr class="inv-sep">
+      <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
+      <hr class="inv-sep">
+      <div><span class="inv-label">Ordered By</span>&nbsp;${d.ordered_by}</div>
+      <div><span class="inv-label">Job Address</span>&nbsp;${d.job_address}</div>
+      <hr class="inv-sep">
+      <div class="inv-label">Work Performed</div>
+      ${(d.work_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.desc}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
+      <hr class="inv-sep">
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;"><span>Total Labor</span><span>${fmt(laborTotal)}</span></div>
+      <button class="correct-btn" onclick="showCorrectionMenu('labor')">✏️ Something needs correcting</button>
+      <button class="pdf-btn" onclick="generatePDF('labor')">⬇ Generate Labor PDF</button>
+      <button class="text-btn" onclick="sendText('labor')">💬 Send by Text → ${d.bill_to_phone||""}</button>
+    </div>`;
+  }
+
+  if(showMat){
+    html+=`<div class="invoice-preview" style="margin-top:1rem;">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Materials <span class="tag mat">Materials</span></h3>
+      <div style="font-size:12px;color:#888;">#${matNum} &nbsp;·&nbsp; ${d.date}</div>
+      <hr class="inv-sep">
+      <div class="inv-label">From</div><div>Alfonso Sanchez Property Services<br>310 Main Ave Apt 1, Long Beach CA 90802<br>562-533-7907</div>
+      <hr class="inv-sep">
+      <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
+      <hr class="inv-sep">
+      <div><span class="inv-label">Ordered By</span>&nbsp;${d.ordered_by}</div>
+      <div><span class="inv-label">Job Address</span>&nbsp;${d.job_address}</div>
+      <hr class="inv-sep">
+      <div class="inv-label">Materials / Reimbursement</div>
+      ${(d.materials_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.desc}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
+      <hr class="inv-sep">
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;"><span>Total Materials</span><span>${fmt(matTotal)}</span></div>
+      <button class="correct-btn" onclick="showCorrectionMenu('materials')">✏️ Something needs correcting</button>
+      <button class="pdf-btn mat" onclick="generatePDF('materials')">⬇ Generate Materials PDF</button>
+      <button class="text-btn" onclick="sendText('materials')">💬 Send by Text → ${d.bill_to_phone||""}</button>
+      <button class="save-btn" onclick="saveForLater()">💾 Save — add more receipts later</button>
+    </div>`;
+  }
+
+  html+=`<button class="new-invoice-btn" onclick="resetChat()">＋ Start New Invoice</button>`;
+  area.innerHTML=html;
+}
+
+function showCorrectionMenu(type){
+  if(!invoiceData) return;
+  const d=invoiceData;
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const fields=[
+    {label:"Partner / Client",key:"ordered_by"},
+    {label:"Job Address",key:"job_address"},
+    {label:"Date",key:"date"},
+  ];
+  if(type==="labor") fields.push({label:"Work / Tasks",key:"work_items"});
+  if(type==="materials") fields.push({label:"Materials / Receipts",key:"materials_items"});
+  
+  addAIMsg("What needs to be corrected? Tap the item:");
+  fields.forEach(f=>{
+    const chip=document.createElement("div");chip.className="chip warn";chip.textContent=f.label;
+    chip.onclick=()=>{
+      area.innerHTML="";
+      const prompts={
+        "ordered_by":"Which partner or client ordered this work?",
+        "job_address":"Which street was the job on?",
+        "date":"What date was the work completed?",
+        "work_items":"Let's redo the tasks. What was the first task and its price?",
+        "materials_items":"Let's redo the materials. Where did you buy the first receipt and how much?"
+      };
+      addAIMsg(prompts[f.key]||`Please provide the correct ${f.label}.`);
+      if(f.key==="job_address") showStreetChips();
+      else if(f.key==="ordered_by") showPartnerChips();
+      else if(f.key==="work_items"||f.key==="materials_items") showYesNoChips();
+      messages.push({role:"assistant",content:prompts[f.key]});
+    };
+    area.appendChild(chip);
+  });
+  document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
+}
+
+function saveForLater(){
+  if(!invoiceData) return;
+  const entry={
+    invoiceData,
+    receipts:[...receipts],
+    job_address:invoiceData.job_address,
+    date:invoiceData.date,
+    receipts_count:receipts.length,
+    saved_at:new Date().toISOString()
+  };
+  incompleteInvoices.push(entry);
+  saveIncomplete();
+  addAIMsg("💾 Saved! Tap 'Uncompleted invoices' at the top to come back and add more receipts.");
+  document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
+}
+
+async function generatePDF(type){
+  if(!invoiceData)return;
+  const d=invoiceData;
+  const doc=new jsPDF({unit:"pt",format:"letter"});
+  const W=612,M=50,cw=W-M*2;let y=M;
+  function hline(){doc.setDrawColor(220);doc.setLineWidth(0.5);doc.line(M,y,W-M,y);y+=14;}
+  function secLabel(str){doc.setFontSize(8);doc.setFont("helvetica","normal");doc.setTextColor(150);doc.text(str.toUpperCase(),M,y);y+=5;hline();}
+  doc.setFontSize(17);doc.setFont("helvetica","bold");doc.setTextColor(20);
+  doc.text("Alfonso Sanchez Property Services",M,y);y+=20;
+  doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(100);
+  doc.text("310 Main Avenue Apt 1, Long Beach CA 90802   |   562-533-7907",M,y);y+=24;
+  const isLabor=type==="labor";
+  doc.setFillColor(isLabor?220:254,isLabor?252:252,isLabor?231:200);
+  doc.roundedRect(M,y,cw,40,5,5,"F");
+  doc.setFontSize(14);doc.setFont("helvetica","bold");
+  doc.setTextColor(isLabor?22:133,isLabor?101:56,isLabor?52:11);
+  doc.text(isLabor?"LABOR INVOICE":"MATERIALS INVOICE",M+16,y+26);
+  const invNum=isLabor?laborNum:matNum;
+  doc.setFontSize(10);doc.setFont("helvetica","normal");
+  doc.text(`Invoice #${invNum}   ·   ${d.date}`,W-M-16,y+26,{align:"right"});
+  y+=56;
+  secLabel("Bill To");
+  doc.setFontSize(10);doc.setFont("helvetica","bold");doc.setTextColor(20);doc.text(d.bill_to_name,M,y);y+=14;
+  doc.setFont("helvetica","normal");doc.setTextColor(60);
+  const addrLines=doc.splitTextToSize(d.bill_to_address,cw);doc.text(addrLines,M,y);y+=addrLines.length*14;
+  if(d.bill_to_email){doc.text(d.bill_to_email,M,y);y+=14;}
+  if(d.bill_to_phone){doc.text(d.bill_to_phone,M,y);y+=14;}
+  y+=8;
+  secLabel("Ordered By / Job Address");
+  doc.setFontSize(10);doc.setFont("helvetica","bold");doc.setTextColor(20);doc.text(d.ordered_by,M,y);y+=14;
+  doc.setFont("helvetica","normal");doc.setTextColor(60);
+  const jobAddrLines=doc.splitTextToSize(d.job_address,cw);doc.text(jobAddrLines,M,y);y+=jobAddrLines.length*14+10;
+  secLabel(isLabor?"Work Performed":"Materials / Reimbursement");
+  const items=isLabor?d.work_items:d.materials_items;
+  let total=0;
+  items.forEach(item=>{
+    doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(20);
+    const lines=doc.splitTextToSize(item.desc,cw-90);doc.text(lines,M,y);
+    const amt=parseFloat(item.amount);total+=amt;
+    doc.text(fmt(amt),W-M,y,{align:"right"});y+=lines.length*14+6;
+  });
+  y+=4;doc.setDrawColor(180);doc.line(M,y,W-M,y);y+=14;
+  doc.setFont("helvetica","bold");doc.setFontSize(12);doc.setTextColor(20);
+  doc.text(isLabor?"TOTAL LABOR":"TOTAL MATERIALS",M,y);doc.text(fmt(total),W-M,y,{align:"right"});y+=40;
+  const photos=isLabor?jobPhotos:receipts.map(r=>r.dataUrl);
+  if(photos.length>0){
+    doc.addPage();let py=M;
+    doc.setFontSize(13);doc.setFont("helvetica","bold");doc.setTextColor(20);
+    doc.text(isLabor?"Job Photos":"Receipt Photos",M,py);py+=24;
+    for(let i=0;i<photos.length;i++){
+      try{
+        const img=new Image();await new Promise(res=>{img.onload=res;img.src=photos[i];});
+        const ratio=img.naturalHeight/img.naturalWidth;
+        const iw=Math.min(cw,500);const ih=Math.min(iw*ratio,400);
+        if(py+ih>750){doc.addPage();py=M;}
+        doc.addImage(photos[i],"JPEG",M,py,iw,ih);py+=ih+8;
+        doc.setFontSize(9);doc.setTextColor(130);doc.text(`${isLabor?"Photo":"Receipt"} ${i+1}`,M,py);py+=18;
+      }catch(e){}
+    }
+  }
+  const fname=isLabor?`Labor_Invoice_${laborNum}.pdf`:`Materials_Invoice_${matNum}.pdf`;
+  doc.save(fname);
+  if(isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}
+  addAIMsg(`📄 PDF ready: ${fname}. Share via text or WhatsApp.`);
+  document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
+}
+
+function sendText(type){
+  if(!invoiceData)return;
+  const phone=(invoiceData.bill_to_phone||"").replace(/\D/g,"");
+  const isLabor=type==="labor";
+  const body=encodeURIComponent(`Hi, please find attached ${isLabor?"labor":"materials"} invoice #${isLabor?laborNum:matNum} from Alfonso Sanchez Property Services.`);
+  window.open(phone?`sms:${phone}?body=${body}`:`sms:?body=${body}`,"_blank");
+  addAIMsg(`📱 Opening messages to ${invoiceData.bill_to_phone||"client"}. Attach the PDF manually.`);
+  document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
+}
+
+function showFormattedSummary(rawReply){
+  // Strip markdown and format nicely
+  const clean = stripMarkdown(rawReply);
+  // Build a formatted version in the chat bubble
+  const box = document.getElementById("chatBox");
+  const d = document.createElement("div");
+  d.className = "msg ai";
+  d.style.cssText = "max-width:95%;font-size:13px;line-height:1.9;white-space:pre-line;";
+  // Format the raw text by replacing dash separators with newlines
+  let formatted = clean
+    .replace(/INVOICE DETAILS:\s*[-–—]*/gi, 'Invoice Details\n')
+    .replace(/\s*-\s*Client:/gi, '\nClient:')
+    .replace(/\s*-\s*Ordered by:/gi, '\nOrdered by:')
+    .replace(/\s*-\s*Job Address:/gi, '\nJob Address:')
+    .replace(/\s*-\s*Date Completed:/gi, '\nDate:')
+    .replace(/\s*-\s*Date:/gi, '\nDate:')
+    .replace(/\s*-\s*Labor:/gi, '\nWork Performed:')
+    .replace(/\s*-\s*Materials:/gi, '\nMaterials:')
+    .replace(/\s*Total Labor:/gi, '\nTotal Labor:')
+    .replace(/\s*Total Materials:/gi, '\nTotal Materials:')
+    .replace(/\s*---\s*/g, '')
+    .replace(/Is everything correct.*$/i, '\n\nIs everything correct?')
+    .replace(/Todo correcto.*$/i, '\n\n¿Todo correcto?');
+  d.textContent = formatted;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+function showAddressManager(){
+  document.getElementById("addressManagerPanel").style.display="block";
+  document.getElementById("mainPanel").style.display="none";
+  document.getElementById("managerPanel").style.display="none";
+  document.getElementById("incompletePanel").style.display="none";
+  renderAddressManager();
+}
+function hideAddressManager(){
+  document.getElementById("addressManagerPanel").style.display="none";
+  document.getElementById("mainPanel").style.display="block";
+}
+function renderAddressManager(){
+  const clientName=document.getElementById("addrClientSelect").value;
+  const el=document.getElementById("addressManagerList");
+  // For Andrew, show pre-loaded + saved; for others just saved
+  const isAndrew=clientName==="Andrew Whallon";
+  const saved=[];
+  try{const s=JSON.parse(localStorage.getItem(getClientAddressKey(clientName))||"[]");saved.push(...s);}catch(e){}
+  const preloaded=isAndrew?ANDREW_ADDRESSES:[];
+  
+  let html="";
+  if(preloaded.length){
+    html+='<div style="font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;">Pre-loaded</div>';
+    preloaded.forEach((a,i)=>{
+      html+=`<div class="client-row"><div class="client-info">${a.display}<span>${a.full}</span></div></div>`;
+    });
+  }
+  if(saved.length){
+    html+='<div style="font-size:11px;color:#888;margin:10px 0 6px;text-transform:uppercase;">Added</div>';
+    saved.forEach((a,i)=>{
+      html+=`<div class="client-row"><div class="client-info">${a.display}<span>${a.full}</span></div><div style="display:flex;gap:6px;"><button class="del-btn" onclick="editAddress('${clientName}',${i})">Edit</button><button class="del-btn" onclick="deleteAddress('${clientName}',${i})">Delete</button></div></div>`;
+    });
+  }
+  if(!preloaded.length&&!saved.length){
+    html='<div style="font-size:13px;color:#888;padding:8px 0;">No addresses saved yet.</div>';
+  }
+  el.innerHTML=html;
+}
+function editAddress(clientName, idx){
+  const key=getClientAddressKey(clientName);
+  let saved=[];
+  try{saved=JSON.parse(localStorage.getItem(key)||"[]");}catch(e){}
+  const addr=saved[idx];
+  if(!addr) return;
+  
+  // Parse existing address into parts
+  // Format: "1001 Cherry Ave Unit 102, Long Beach CA 90813"
+  const full=addr.full;
+  const parts=full.split(',');
+  const streetPart=(parts[0]||"").trim();
+  const cityZipPart=(parts[1]||"").trim();
+  
+  // Extract unit from street part
+  const unitMatch=streetPart.match(/Unit\s+(\S+)/i);
+  const unit=unitMatch?unitMatch[1]:"";
+  const streetNoUnit=streetPart.replace(/Unit\s+\S+/i,"").trim();
+  
+  // Extract street number and name
+  const streetNumMatch=streetNoUnit.match(/^(\d+)\s+(.+)$/);
+  const streetNum=streetNumMatch?streetNumMatch[1]:"";
+  const streetName=streetNumMatch?streetNumMatch[2]:"";
+  
+  // Extract city and zip
+  const cityZipMatch=cityZipPart.match(/^(.+?)\s+(\w{2})\s+(\d{5})$/);
+  const city=cityZipMatch?cityZipMatch[1]:"";
+  const zip=cityZipMatch?cityZipMatch[3]:"";
+  
+  currentOrderedBy=clientName;
+  editingAddressIdx=idx;
+  editingAddressKey=key;
+  editingAddressData={streetName, streetNum, unit, city, zip, saved, idx};
+  
+  hideAddressManager();
+  document.getElementById("chatBox").innerHTML="";
+  document.getElementById("chipArea").innerHTML="";
+  
+  addAIMsg(`Current address:\n${full}\n\nWhat would you like to change?`);
+  showAddressEditChips();
+}
+
+let editingAddressIdx=-1;
+let editingAddressKey="";
+let editingAddressData=null;
+
+function showAddressEditChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const d=editingAddressData;
+  const fields=[
+    {label:`Street Name (${d.streetName})`, field:"streetName"},
+    {label:`Street Number (${d.streetNum})`, field:"streetNum"},
+    {label:`Unit (${d.unit||"none"})`, field:"unit"},
+    {label:`City (${d.city})`, field:"city"},
+    {label:`Zip (${d.zip})`, field:"zip"},
+  ];
+  fields.forEach(f=>{
+    const chip=document.createElement("div");chip.className="chip";chip.textContent=f.label;
+    chip.onclick=()=>{
+      area.innerHTML="";
+      newAddrState={step:"edit_field",data:{...d,field:f.field}};
+      const prompts={
+        streetName:"What is the correct street name?",
+        streetNum:"What is the correct street number?",
+        unit:"What is the unit number? (type 'none' if no unit)",
+        city:"What is the correct city?",
+        zip:"What is the correct zip code?"
+      };
+      addAIMsg(prompts[f.field]);
+    };
+    area.appendChild(chip);
+  });
+  // Done button
+  const done=document.createElement("div");done.className="chip new";done.textContent="✓ Done editing";
+  done.onclick=()=>{
+    area.innerHTML="";
+    editingAddressData=null;
+    showAddressManager();
+  };
+  area.appendChild(done);
+}
+
+function deleteAddress(clientName, idx){
+  const key=getClientAddressKey(clientName);
+  let saved=[];
+  try{saved=JSON.parse(localStorage.getItem(key)||"[]");}catch(e){}
+  saved.splice(idx,1);
+  try{localStorage.setItem(key,JSON.stringify(saved));}catch(e){}
+  renderAddressManager();
+}
+function startAddressManagerAdd(){
+  const clientName=document.getElementById("addrClientSelect").value;
+  currentOrderedBy=clientName;
+  hideAddressManager();
+  newAddrState={step:"street_name",data:{}};
+  document.getElementById("chatBox").innerHTML="";
+  addAIMsg(`Adding new address for ${clientName}. What is the street name?`);
+}
+
+window.onload=()=>resetChat();
+</script>
+</body>
+</html>
