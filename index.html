@@ -490,7 +490,9 @@ ${clientList}
 If new client: collect name, address, email, phone.`;
 
   const flowStep1=isGeneric
-    ? `1. Who is this invoice for? The app will show saved client buttons, or the user can add a new client.`
+    ? (savedClients.length
+        ? `1. Who is this invoice for? The app will show saved client buttons, or the user can add a new client.`
+        : `1. Tell the user there are no saved clients yet and you'll help them add one. Ask "Who is this invoice for?" The app will show a button to add a new client.`)
     : `1. BPLW Management or different client?
 2. Which partner ordered? You may list the partner names for clarity.`;
 
@@ -723,7 +725,6 @@ function showPartnerChips(){
   });
 }
 function showSavedClientChips(){
-  if(!savedClients.length)return;
   const area=document.getElementById("chipArea");area.innerHTML="";
   savedClients.forEach(c=>{
     const chip=document.createElement("div");chip.className="chip";chip.textContent=c.name;
