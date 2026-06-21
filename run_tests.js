@@ -1258,6 +1258,109 @@ async function testRetroactiveContractorPhoneFormatting() {
     winGood.eval('contractorInfo.phone') === "562-867-5309");
 }
 
+async function testMidConversationSaveAndResume() {
+  console.log("\n=== TEST SUITE 23: Mid-Conversation Save and Resume ===");
+
+  // The save button should be hidden at the very start (no real data yet)
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+  check("Mid-save button is hidden on the very first question (invoice_type)",
+    win.document.getElementById("midSaveBtn").style.display !== "block");
+
+  // Simulate reaching the tasks stage in BPLW mode (after picking an address chip)
+  win.eval(`
+    invoiceType = "labor";
+    messages = [{role:"user",content:"Labor Only"},{role:"assistant",content:"Which partner ordered?"}];
+    currentOrderedBy = "Richard Baisz";
+    convStage = "street";
+    showAddressChips();
+  `);
+  // Manually save an address for Richard so a chip exists to click
+  win.eval(`saveClientAddress("Richard Baisz", {id:"x", display:"123 Test St", full:"123 Test St, Long Beach CA 90802"})`);
+  win.eval(`showAddressChips()`);
+  win.eval(`document.querySelector('#chipArea .chip:not(.new)').click()`);
+  check("Mid-save button becomes visible once an address is selected (real data exists)",
+    win.document.getElementById("midSaveBtn").style.display === "block");
+  check("Back button is also visible at this stage", win.document.getElementById("backBtn").style.display === "block");
+
+  // Now actually save the conversation mid-flow
+  win.eval(`messages.push({role:"user",content:"123 Test St, Long Beach CA 90802"});messages.push({role:"assistant",content:"What was the first task and price?"})`);
+  win.eval(`saveConversationForLater()`);
+  const savedEntries = JSON.parse(win.eval('JSON.stringify(incompleteInvoices)'));
+  check("A conversation entry was actually saved", savedEntries.length === 1);
+  check("Saved entry is marked as kind:conversation, distinct from finished-invoice saves",
+    savedEntries[0].kind === "conversation");
+  check("Saved entry captures the full message history", savedEntries[0].messages.length === 5,
+    `expected 5, got ${savedEntries[0].messages.length}`);
+  check("Saved entry captures the current stage", savedEntries[0].convStage === "tasks");
+  check("Saved entry captures which partner/client was selected", savedEntries[0].currentOrderedBy === "Richard Baisz");
+  check("Saved entry captures the contractor mode at time of saving", savedEntries[0].contractorMode === "bplw");
+
+  const chatHtml = win.document.getElementById("chatBox").innerHTML;
+  check("A confirmation message is shown after saving", chatHtml.includes("Saved"));
+  check("Mid-save button hides itself immediately after saving", win.document.getElementById("midSaveBtn").style.display !== "block");
+
+  // Confirm the Uncompleted list correctly labels this as an in-progress conversation, not a finished materials invoice
+  win.eval(`renderIncompleteList()`);
+  const incompleteHtml = win.document.getElementById("incompleteList").innerHTML;
+  check("Uncompleted list shows 'In Progress' label for a saved conversation", incompleteHtml.includes("In Progress"));
+  check("Uncompleted list shows the invoice type (Labor) for this saved conversation", incompleteHtml.includes("Labor"));
+
+  // Now resume it on what's effectively a fresh session
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval(`incompleteInvoices = ${JSON.stringify(savedEntries)}; saveIncomplete();`);
+  win2.eval(`continueIncomplete(0)`);
+  await wait(100);
+
+  check("Resuming restores the full message history plus the continuation handoff", win2.eval('messages.length') === 6,
+    `expected 6 (5 restored + 1 handoff), got ${win2.eval('messages.length')}`);
+  check("Resuming restores convStage", win2.eval('convStage') === "tasks");
+  check("Resuming restores invoiceType", win2.eval('invoiceType') === "labor");
+  check("Resuming restores currentOrderedBy", win2.eval('currentOrderedBy') === "Richard Baisz");
+  check("The saved entry is removed from incompleteInvoices after resuming (no duplicate)",
+    win2.eval('incompleteInvoices.length') === 0);
+
+  const resumedChatHtml = win2.document.getElementById("chatBox").innerHTML;
+  check("Resumed chat re-displays the prior conversation history", resumedChatHtml.includes("first task and price"));
+
+  const lastMsg = win2.eval('messages[messages.length-1].content');
+  check("A continuation handoff message was sent to the AI after resuming",
+    lastMsg.toLowerCase().includes("continue") || lastMsg.toLowerCase().includes("paused"));
+
+  // Confirm a mode mismatch is handled safely rather than silently resuming into the wrong flow
+  const dom3 = freshDom();
+  const win3 = dom3.window;
+  await wait(300);
+  const mismatchedEntry = {...savedEntries[0], contractorMode:"generic"};
+  win3.eval(`contractorInfo.mode = "bplw"; incompleteInvoices = [${JSON.stringify(mismatchedEntry)}]; saveIncomplete();`);
+  win3.eval(`continueIncomplete(0)`);
+  await wait(100);
+  const mismatchChatHtml = win3.document.getElementById("chatBox").innerHTML;
+  check("A mode mismatch shows a warning instead of silently resuming",
+    mismatchChatHtml.toLowerCase().includes("different") || mismatchChatHtml.toLowerCase().includes("diferente"));
+  check("The mismatched entry is removed rather than left dangling", win3.eval('incompleteInvoices.length') === 0);
+
+  // Confirm existing finished-invoice saves (the original materials feature) still work unaffected
+  const dom4 = freshDom();
+  const win4 = dom4.window;
+  await wait(300);
+  win4.eval(`
+    invoiceData = {done:true, job_address:"456 Old Flow", date:"June 1, 2026", bill_to_name:"Test", bill_to_address:"x", materials_items:[{vendor:"A",desc:"B",date:"x",amount:10}], work_items:[]};
+    receipts = [{dataUrl:"data:image/jpeg;base64,X"}];
+    saveForLater();
+  `);
+  const oldStyleEntries = JSON.parse(win4.eval('JSON.stringify(incompleteInvoices)'));
+  check("Original finished-invoice saveForLater still works and has no 'kind' field (backward compatible)",
+    oldStyleEntries.length === 1 && !oldStyleEntries[0].kind);
+  win4.eval(`renderIncompleteList()`);
+  const oldStyleHtml = win4.document.getElementById("incompleteList").innerHTML;
+  check("Old-style finished-invoice entries still render with the original 'Materials —' label",
+    oldStyleHtml.includes("Materials —") && !oldStyleHtml.includes("In Progress"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -1282,6 +1385,7 @@ async function testRetroactiveContractorPhoneFormatting() {
     await testAndrewWhallonNameCollisionFix();
     await testJobPhotoPromptFlow();
     await testRetroactiveContractorPhoneFormatting();
+    await testMidConversationSaveAndResume();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
