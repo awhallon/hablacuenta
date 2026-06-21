@@ -406,7 +406,7 @@ ${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase 
    c. "What date was it purchased?" (date)
    d. "How much did it cost?" (amount)
    After step d, say exactly "Got it. Want to add a photo of this receipt?" The app will show photo buttons — wait for the user's response before continuing.
-   After the photo step, ask "Any other receipts?" If yes, repeat steps a-d and the photo step for the next receipt. Each detail goes into its own field (vendor, desc, date, amount) — never combine them into one string.`:""}
+   After the photo step, ask "Any other receipts to add right now?" If yes, repeat steps a-d and the photo step for the next receipt. If no, say "Okay, that's it for now. If you think of more receipts later, you can save this invoice on the next screen and come back to add them." then continue to the next step. Each detail goes into its own field (vendor, desc, date, amount) — never combine them into one string.`:""}
 ${invoiceType==="both"?"7":"6"}. Date work was completed?
 ${invoiceType==="both"?"8":"7"}. Confirm all details. Show the full built address. If anything needs correction, say "Please tell me what to fix."
 
