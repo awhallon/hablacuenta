@@ -795,7 +795,7 @@ function renderHistoryList(){
   if(!invoiceHistory.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">No invoices yet.</div>`;return;}
   el.innerHTML=invoiceHistory.map((h,i)=>{
     const d=h.invoiceData;
-    const label=h.type==="labor"?"Labor":"Materials";
+    const label=h.type==="labor"?"Labor":h.type==="both"?"Labor & Materials":"Materials";
     const dateStr=d.date||"";
     return `<div class="incomplete-item" onclick="viewHistoryInvoice(${i})">
       <div class="incomplete-title">#${h.invNum} — ${label} — ${d.job_address||"Job"}</div>
@@ -810,7 +810,7 @@ function viewHistoryInvoice(i){
   receipts=h.receipts||[];
   jobPhotos=h.jobPhotos||[];
   invoiceType=h.type;
-  if(h.type==="materials"){
+  if(h.type==="materials"||h.type==="both"){
     document.getElementById("photoSections").style.display="block";
     document.getElementById("receiptSection").style.display="block";
     renderReceipts();
@@ -1264,8 +1264,18 @@ function triggerPhoto(type){document.getElementById(type==="job"?"jobPhotoInput"
 function handlePhoto(type,event){
   const file=event.target.files[0];if(!file)return;
   const reader=new FileReader();
-  reader.onload=function(e){
-    const dataUrl=e.target.result;
+  reader.onload=async function(e){
+    let dataUrl=e.target.result;
+    try{
+      const arrayBuffer=await file.arrayBuffer();
+      const orientation=getExifOrientation(arrayBuffer);
+      if(orientation>1){
+        dataUrl=await correctImageOrientation(dataUrl,orientation);
+      }
+    }catch(err){
+      // If EXIF reading/correction fails for any reason, fall back to the original photo
+      // rather than blocking the user from adding it at all.
+    }
     if(type==="job"){if(jobPhotos.length>=8){alert("Max 8 photos.");return;}jobPhotos.push(dataUrl);renderJobPhotos();}
     else{
       receipts.push({dataUrl});renderReceipts();
@@ -1383,6 +1393,81 @@ function sendMsg(){
 document.getElementById("userInput").addEventListener("keydown",e=>{if(e.key==="Enter")sendMsg();});
 
 function fmt(n){return"$"+parseFloat(n).toFixed(2);}
+// Reads the EXIF orientation tag (1-8) from a JPEG ArrayBuffer. Returns 1 (normal) if absent or not a JPEG.
+function getExifOrientation(arrayBuffer){
+  const view=new DataView(arrayBuffer);
+  if(view.byteLength<4) return 1; // too short to even be a JPEG
+  if(view.getUint16(0,false)!==0xFFD8) return 1; // not a JPEG
+  let offset=2;
+  const length=view.byteLength;
+  try{
+    while(offset+2<=length){
+      const marker=view.getUint16(offset,false);
+      offset+=2;
+      if(marker===0xFFD9||marker===0xFFDA) break; // EOI or start of scan — no more markers to read
+      if(marker===0xFFE1){ // APP1 marker, where EXIF lives
+        if(offset+2>length) return 1;
+        if(offset+8>length) return 1;
+        if(view.getUint32(offset+2,false)!==0x45786966) return 1; // "Exif"
+        const tiffOffset=offset+8;
+        if(tiffOffset+8>length) return 1;
+        const little=view.getUint16(tiffOffset,false)===0x4949;
+        const firstIFDOffset=view.getUint32(tiffOffset+4,little);
+        const dirStart=tiffOffset+firstIFDOffset;
+        if(dirStart+2>length) return 1;
+        const entries=view.getUint16(dirStart,little);
+        for(let i=0;i<entries;i++){
+          const entryOffset=dirStart+2+i*12;
+          if(entryOffset+10>length) break;
+          const tag=view.getUint16(entryOffset,little);
+          if(tag===0x0112){ // Orientation tag
+            return view.getUint16(entryOffset+8,little);
+          }
+        }
+        return 1;
+      } else if((marker&0xFF00)!==0xFF00){
+        break;
+      } else {
+        if(offset+2>length) break;
+        offset+=view.getUint16(offset,false);
+      }
+    }
+  }catch(e){
+    return 1; // any unexpected parsing error: treat as "no rotation needed" rather than crash
+  }
+  return 1;
+}
+// Draws the image onto a canvas, physically applying the rotation/flip implied by the EXIF
+// orientation value, and returns a new dataUrl with orientation baked into the pixels.
+// This is needed because jsPDF's addImage() ignores EXIF orientation and embeds raw pixel data,
+// even though browsers (and our own <img> thumbnails) display EXIF-rotated photos correctly.
+function correctImageOrientation(dataUrl,orientation){
+  return new Promise((resolve)=>{
+    if(orientation===1){resolve(dataUrl);return;}
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement("canvas");
+      const ctx=canvas.getContext("2d");
+      const w=img.naturalWidth,h=img.naturalHeight;
+      if(orientation>4){canvas.width=h;canvas.height=w;}else{canvas.width=w;canvas.height=h;}
+      switch(orientation){
+        case 2: ctx.transform(-1,0,0,1,w,0); break;
+        case 3: ctx.transform(-1,0,0,-1,w,h); break;
+        case 4: ctx.transform(1,0,0,-1,0,h); break;
+        case 5: ctx.transform(0,1,1,0,0,0); break;
+        case 6: ctx.transform(0,1,-1,0,h,0); break;
+        case 7: ctx.transform(0,-1,-1,0,h,w); break;
+        case 8: ctx.transform(0,-1,1,0,0,w); break;
+        default: break;
+      }
+      ctx.drawImage(img,0,0,w,h);
+      resolve(canvas.toDataURL("image/jpeg",0.92));
+    };
+    img.onerror=()=>resolve(dataUrl); // fall back to original if correction fails
+    img.src=dataUrl;
+  });
+}
+
 function formatPhone(raw){
   if(!raw) return raw;
   const digits=raw.replace(/\D/g,"");
@@ -1414,12 +1499,45 @@ function showInvoicePreview(d,viewNum){
   const area=document.getElementById("invoiceArea");
   const laborTotal=(d.work_items||[]).reduce((s,i)=>s+parseFloat(i.amount),0);
   const matTotal=(d.materials_items||[]).reduce((s,i)=>s+parseFloat(i.amount),0);
-  const showLabor=d.has_labor||invoiceType==="labor"||invoiceType==="both";
-  const showMat=(d.has_materials||invoiceType==="materials"||invoiceType==="both")&&d.materials_items&&d.materials_items.length>0;
+  const hasLaborItems=d.work_items&&d.work_items.length>0&&(d.has_labor||invoiceType==="labor"||invoiceType==="both");
+  const hasMatItems=d.materials_items&&d.materials_items.length>0&&(d.has_materials||invoiceType==="materials"||invoiceType==="both");
+  const isCombined=hasLaborItems&&hasMatItems;
   const displayName=contractorDisplayName(contractorInfo);
   let html="";
 
-  if(showLabor&&d.work_items&&d.work_items.length>0){
+  if(isCombined){
+    const grandTotal=laborTotal+matTotal;
+    html+=`<div class="invoice-preview">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Labor &amp; Materials <span class="tag labor">Labor</span> <span class="tag mat">Materials</span></h3>
+      <div style="font-size:12px;color:#888;">#${viewNum||laborNum} &nbsp;·&nbsp; ${d.date}</div>
+      <hr class="inv-sep">
+      <div class="inv-label">From</div><div>${displayName}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
+      <hr class="inv-sep">
+      <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
+      <hr class="inv-sep">
+      ${d.ordered_by?`<div><span class="inv-label">Ordered By</span>&nbsp;${d.ordered_by}</div>`:""}
+      <div><span class="inv-label">Job Address</span>&nbsp;${d.job_address}</div>
+      <hr class="inv-sep">
+      <div class="inv-label">Work Performed</div>
+      ${(d.work_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.desc}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
+      <div style="display:flex;justify-content:space-between;font-weight:600;padding:4px 0;border-top:1px solid #eee;margin-top:4px;"><span>Subtotal — Labor</span><span>${fmt(laborTotal)}</span></div>
+      <hr class="inv-sep">
+      <div class="inv-label">Materials / Reimbursement</div>
+      ${(d.materials_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.vendor?i.vendor+" — ":""}${i.desc}${i.date?" ("+i.date+")":""}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
+      <div style="display:flex;justify-content:space-between;font-weight:600;padding:4px 0;border-top:1px solid #eee;margin-top:4px;"><span>Subtotal — Materials</span><span>${fmt(matTotal)}</span></div>
+      <hr class="inv-sep">
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;"><span>Total</span><span>${fmt(grandTotal)}</span></div>
+      ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('both')">✏️ Something needs correcting</button>`:""}
+      <button class="pdf-btn" onclick="generatePDF('both',${viewNum||"null"})">⬇ Generate PDF</button>
+      <button class="text-btn" onclick="shareInvoicePDF('both',${viewNum||"null"})">📤 Share Invoice</button>
+      ${!viewNum?`<button class="save-btn" onclick="saveForLater()">💾 Save — add more receipts later</button>`:""}
+    </div>`;
+    html+=`<button class="new-invoice-btn" onclick="resetChat()">＋ Start New Invoice</button>`;
+    area.innerHTML=html;
+    return;
+  }
+
+  if(hasLaborItems){
     html+=`<div class="invoice-preview">
       <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Labor <span class="tag labor">Labor</span></h3>
       <div style="font-size:12px;color:#888;">#${viewNum||laborNum} &nbsp;·&nbsp; ${d.date}</div>
@@ -1441,7 +1559,7 @@ function showInvoicePreview(d,viewNum){
     </div>`;
   }
 
-  if(showMat){
+  if(hasMatItems){
     html+=`<div class="invoice-preview" style="margin-top:1rem;">
       <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Materials <span class="tag mat">Materials</span></h3>
       <div style="font-size:12px;color:#888;">#${viewNum||matNum} &nbsp;·&nbsp; ${d.date}</div>
@@ -1477,8 +1595,8 @@ function showCorrectionMenu(type){
     {label:"Job Address",key:"job_address"},
     {label:"Date",key:"date"},
   ];
-  if(type==="labor") fields.push({label:"Work / Tasks",key:"work_items"});
-  if(type==="materials") fields.push({label:"Materials / Receipts",key:"materials_items"});
+  if(type==="labor"||type==="both") fields.push({label:"Work / Tasks",key:"work_items"});
+  if(type==="materials"||type==="both") fields.push({label:"Materials / Receipts",key:"materials_items"});
   
   addAIMsg("What needs to be corrected? Tap the item:");
   fields.forEach(f=>{
@@ -1488,7 +1606,7 @@ function showCorrectionMenu(type){
       const prompts={
         "ordered_by":"Which partner or client ordered this work?",
         "job_address":"Which street was the job on?",
-        "date":type==="materials"?"What date should go on this invoice?":"What date was the work completed?",
+        "date":(type==="materials"||type==="both")?"What date should go on this invoice?":"What date was the work completed?",
         "work_items":"Let's redo the tasks. What was the first task and its price?",
         "materials_items":"Let's redo the materials. Where did you buy the first receipt?"
       };
@@ -1526,17 +1644,21 @@ async function buildPDF(type,forceNum){
   const W=612,M=50,cw=W-M*2;let y=M;
   function hline(){doc.setDrawColor(220);doc.setLineWidth(0.5);doc.line(M,y,W-M,y);y+=14;}
   function secLabel(str){doc.setFontSize(8);doc.setFont("helvetica","normal");doc.setTextColor(150);doc.text(str.toUpperCase(),M,y);y+=5;hline();}
+  function ensureRoom(needed){if(y+needed>740){doc.addPage();y=M;}}
   doc.setFontSize(17);doc.setFont("helvetica","bold");doc.setTextColor(20);
   doc.text(contractorDisplayName(contractorInfo),M,y);y+=20;
   doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(100);
   doc.text(`${contractorInfo.address}   |   ${contractorInfo.phone}`,M,y);y+=24;
   const isLabor=type==="labor";
-  doc.setFillColor(isLabor?220:254,isLabor?252:252,isLabor?231:200);
+  const isCombined=type==="both";
+  const headerColor=isCombined?[245,238,255]:isLabor?[220,252,231]:[254,252,200];
+  const titleColor=isCombined?[91,33,182]:isLabor?[22,101,52]:[133,56,11];
+  doc.setFillColor(...headerColor);
   doc.roundedRect(M,y,cw,40,5,5,"F");
   doc.setFontSize(14);doc.setFont("helvetica","bold");
-  doc.setTextColor(isLabor?22:133,isLabor?101:56,isLabor?52:11);
-  doc.text(isLabor?"LABOR INVOICE":"MATERIALS INVOICE",M+16,y+26);
-  const invNum=forceNum||(isLabor?laborNum:matNum);
+  doc.setTextColor(...titleColor);
+  doc.text(isCombined?"INVOICE — LABOR & MATERIALS":isLabor?"LABOR INVOICE":"MATERIALS INVOICE",M+16,y+26);
+  const invNum=forceNum||(isCombined?laborNum:isLabor?laborNum:matNum);
   doc.setFontSize(10);doc.setFont("helvetica","normal");
   doc.text(`Invoice #${invNum}   ·   ${d.date}`,W-M-16,y+26,{align:"right"});
   y+=56;
@@ -1551,24 +1673,51 @@ async function buildPDF(type,forceNum){
   if(d.ordered_by){doc.setFontSize(10);doc.setFont("helvetica","bold");doc.setTextColor(20);doc.text(d.ordered_by,M,y);y+=14;}
   doc.setFont("helvetica","normal");doc.setTextColor(60);
   const jobAddrLines=doc.splitTextToSize(d.job_address,cw);doc.text(jobAddrLines,M,y);y+=jobAddrLines.length*14+10;
-  secLabel(isLabor?"Work Performed":"Materials / Reimbursement");
-  const items=isLabor?d.work_items:d.materials_items;
-  let total=0;
-  items.forEach(item=>{
-    doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(20);
-    const lineText=(!isLabor&&item.vendor)?`${item.vendor} — ${item.desc}${item.date?" ("+item.date+")":""}`:item.desc;
-    const lines=doc.splitTextToSize(lineText,cw-90);doc.text(lines,M,y);
-    const amt=parseFloat(item.amount);total+=amt;
-    doc.text(fmt(amt),W-M,y,{align:"right"});y+=lines.length*14+6;
-  });
-  y+=4;doc.setDrawColor(180);doc.line(M,y,W-M,y);y+=14;
-  doc.setFont("helvetica","bold");doc.setFontSize(12);doc.setTextColor(20);
-  doc.text(isLabor?"TOTAL LABOR":"TOTAL MATERIALS",M,y);doc.text(fmt(total),W-M,y,{align:"right"});y+=40;
-  const photos=isLabor?jobPhotos:receipts.map(r=>r.dataUrl);
+
+  let laborTotal=0,matTotal=0;
+
+  function renderItemSection(label,items,isLaborSection){
+    secLabel(label);
+    let sectionTotal=0;
+    items.forEach(item=>{
+      ensureRoom(20);
+      doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(20);
+      const lineText=(!isLaborSection&&item.vendor)?`${item.vendor} — ${item.desc}${item.date?" ("+item.date+")":""}`:item.desc;
+      const lines=doc.splitTextToSize(lineText,cw-90);doc.text(lines,M,y);
+      const amt=parseFloat(item.amount);sectionTotal+=amt;
+      doc.text(fmt(amt),W-M,y,{align:"right"});y+=lines.length*14+6;
+    });
+    return sectionTotal;
+  }
+
+  if(isCombined){
+    laborTotal=renderItemSection("Work Performed",d.work_items||[],true);
+    y+=4;doc.setDrawColor(200);doc.line(M,y,W-M,y);y+=14;
+    doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(40);
+    doc.text("SUBTOTAL — LABOR",M,y);doc.text(fmt(laborTotal),W-M,y,{align:"right"});y+=24;
+
+    matTotal=renderItemSection("Materials / Reimbursement",d.materials_items||[],false);
+    y+=4;doc.setDrawColor(200);doc.line(M,y,W-M,y);y+=14;
+    doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(40);
+    doc.text("SUBTOTAL — MATERIALS",M,y);doc.text(fmt(matTotal),W-M,y,{align:"right"});y+=24;
+
+    y+=4;doc.setDrawColor(120);doc.setLineWidth(1.2);doc.line(M,y,W-M,y);doc.setLineWidth(0.5);y+=16;
+    doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(20);
+    doc.text("TOTAL",M,y);doc.text(fmt(laborTotal+matTotal),W-M,y,{align:"right"});y+=40;
+  } else {
+    const items=isLabor?d.work_items:d.materials_items;
+    const total=renderItemSection(isLabor?"Work Performed":"Materials / Reimbursement",items,isLabor);
+    if(isLabor)laborTotal=total;else matTotal=total;
+    y+=4;doc.setDrawColor(180);doc.line(M,y,W-M,y);y+=14;
+    doc.setFont("helvetica","bold");doc.setFontSize(12);doc.setTextColor(20);
+    doc.text(isLabor?"TOTAL LABOR":"TOTAL MATERIALS",M,y);doc.text(fmt(total),W-M,y,{align:"right"});y+=40;
+  }
+
+  const photos=isCombined?[...jobPhotos,...receipts.map(r=>r.dataUrl)]:isLabor?jobPhotos:receipts.map(r=>r.dataUrl);
   if(photos.length>0){
     doc.addPage();let py=M;
     doc.setFontSize(13);doc.setFont("helvetica","bold");doc.setTextColor(20);
-    doc.text(isLabor?"Job Photos":"Receipt Photos",M,py);py+=24;
+    doc.text(isCombined?"Job & Receipt Photos":isLabor?"Job Photos":"Receipt Photos",M,py);py+=24;
     for(let i=0;i<photos.length;i++){
       try{
         const img=new Image();await new Promise(res=>{img.onload=res;img.src=photos[i];});
@@ -1576,21 +1725,21 @@ async function buildPDF(type,forceNum){
         const iw=Math.min(cw,500);const ih=Math.min(iw*ratio,400);
         if(py+ih>750){doc.addPage();py=M;}
         doc.addImage(photos[i],"JPEG",M,py,iw,ih);py+=ih+8;
-        doc.setFontSize(9);doc.setTextColor(130);doc.text(`${isLabor?"Photo":"Receipt"} ${i+1}`,M,py);py+=18;
+        doc.setFontSize(9);doc.setTextColor(130);doc.text(`${isCombined?"Photo":isLabor?"Photo":"Receipt"} ${i+1}`,M,py);py+=18;
       }catch(e){}
     }
   }
-  const fname=isLabor?`Labor_Invoice_${invNum}.pdf`:`Materials_Invoice_${invNum}.pdf`;
-  return {doc,fname,isLabor,invNum};
+  const fname=isCombined?`Invoice_${invNum}.pdf`:isLabor?`Labor_Invoice_${invNum}.pdf`:`Materials_Invoice_${invNum}.pdf`;
+  return {doc,fname,isLabor,isCombined,invNum};
 }
 
 async function generatePDF(type,forceNum){
   const built=await buildPDF(type,forceNum);
   if(!built)return;
-  const {doc,fname,isLabor,invNum}=built;
+  const {doc,fname,isLabor,isCombined,invNum}=built;
   doc.save(fname);
   recordInvoiceHistory(type,invNum);
-  if(!forceNum){if(isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
+  if(!forceNum){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
   addAIMsg(`📄 PDF downloaded: ${fname}. Tap "Share Invoice" to send it directly, or attach it manually from your Downloads.`);
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
 }
@@ -1598,15 +1747,15 @@ async function generatePDF(type,forceNum){
 async function shareInvoicePDF(type,forceNum){
   const built=await buildPDF(type,forceNum);
   if(!built)return;
-  const {doc,fname,isLabor,invNum}=built;
+  const {doc,fname,isLabor,isCombined,invNum}=built;
   const blob=doc.output("blob");
   const file=new File([blob],fname,{type:"application/pdf"});
-  const shareText=`${isLabor?"Labor":"Materials"} invoice from ${contractorDisplayName(contractorInfo)}.`;
+  const shareText=`${isCombined?"Invoice (labor & materials)":isLabor?"Labor invoice":"Materials invoice"} from ${contractorDisplayName(contractorInfo)}.`;
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{
       await navigator.share({files:[file],title:fname,text:shareText});
       recordInvoiceHistory(type,invNum);
-      if(!forceNum){if(isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
+      if(!forceNum){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
       addAIMsg("📤 Invoice shared!");
     }catch(e){
       if(e.name!=="AbortError") addAIMsg("Share canceled or unavailable. Tap 'Generate PDF' to download instead.");
@@ -1615,7 +1764,7 @@ async function shareInvoicePDF(type,forceNum){
     // Fallback: browser doesn't support sharing files (e.g. desktop) — fall back to download
     doc.save(fname);
     recordInvoiceHistory(type,invNum);
-    if(!forceNum){if(isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
+    if(!forceNum){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
     addAIMsg(`📄 Your browser doesn't support direct sharing — PDF downloaded instead: ${fname}.`);
   }
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
