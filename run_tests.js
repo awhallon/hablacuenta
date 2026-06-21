@@ -728,6 +728,49 @@ async function testDateYearValidation() {
   check("Year-clarify chips include a different-year option", chipHtml.toLowerCase().includes("different year"));
 }
 
+async function testJobAddressConfirmationDoesNotRetrigger() {
+  console.log("\n=== TEST SUITE 13: Job-Address Confirmation Does Not Re-trigger Guided Flow (regression for Adrian's reported bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+  win.eval(`contractorInfo.mode = "generic"; invoiceType = "labor";`);
+
+  // The actual question (with a "?") should still trigger the guided flow correctly
+  win.eval(`smartChips("Great! Let's continue. What's the job address?")`);
+  check("The real question (with ?) still triggers the guided flow", win.eval('guidedAddrState !== null'));
+
+  // Complete the flow normally
+  win.eval(`document.getElementById("userInput").value = "1995 Canal Avenue"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "No"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "Long Beach"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "California"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "90810"; sendMsg();`);
+  check("guidedAddrState cleared after the real flow completes", win.eval('guidedAddrState') === null);
+
+  // Now simulate the exact AI confirmation message from Adrian's screenshot —
+  // this is a STATEMENT restating the address, not a question, and must NOT re-trigger the flow
+  win.eval(`smartChips("Got it! The job address is 1995, Long Beach California 90810. What was the first task and price?")`);
+  check("Confirmation statement (no '?' near 'job address') does NOT re-trigger guidedAddrState",
+    win.eval('guidedAddrState') === null);
+
+  // Sanity check: a similar confirmation phrasing without a question mark anywhere near 'address' is also safe
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval(`contractorInfo.mode = "generic";`);
+  win2.eval(`smartChips("The job address is 123 Main St, Anytown CA 90000.")`);
+  check("A bare confirmation sentence with no question mark never triggers the guided flow",
+    win2.eval('guidedAddrState') === null);
+
+  // And confirm BPLW mode's equivalent confirmation phrasing is also safe
+  const dom3 = freshDom();
+  const win3 = dom3.window;
+  await wait(300);
+  win3.eval(`smartChips("Got it, the address was the job at 1001 Cherry Ave. What was the first task and price?")`);
+  check("BPLW mode confirmation phrasing does not re-trigger the address picker chips unexpectedly",
+    win3.document.getElementById("chipArea").innerHTML === "");
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -742,6 +785,7 @@ async function testDateYearValidation() {
     await testGenericJobAddressFlow();
     await testUnifiedAddressBplwAndContractorPurposes();
     await testDateYearValidation();
+    await testJobAddressConfirmationDoesNotRetrigger();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
