@@ -195,13 +195,13 @@ input[type=file]{display:none;}
 
 <script>
 window.addEventListener('error', function(e){
-  alert('JS ERROR: '+e.message+' (line '+e.lineno+')');
+  console.error('JS ERROR:', e.message, 'at line', e.lineno);
 });
 let jsPDF;
 try{
   jsPDF=window.jspdf.jsPDF;
 }catch(e){
-  alert('jsPDF library failed to load: '+e.message);
+  console.error('jsPDF library failed to load:', e.message);
 }
 
 const BPLW_PARTNERS=[
@@ -387,6 +387,16 @@ function handleNewAddressInput(text){
   return false;
 }
 
+const DEFAULT_CONTRACTOR_INFO={name:"Alfonso Sanchez Property Services",address:"310 Main Ave Apt 1, Long Beach CA 90802",phone:"562-533-7907",mode:"bplw"};
+function loadContractorInfo(){
+  try{
+    const saved=JSON.parse(localStorage.getItem("contractor_info"));
+    if(saved&&saved.name)return {mode:"bplw",...saved};
+  }catch(e){}
+  return {...DEFAULT_CONTRACTOR_INFO};
+}
+function saveContractorInfo(){try{localStorage.setItem("contractor_info",JSON.stringify(contractorInfo));}catch(e){}}
+
 let lang="en";
 let messages=[];
 let invoiceData=null;
@@ -413,15 +423,6 @@ function saveLaborNum(){try{localStorage.setItem("laborNum",String(laborNum));}c
 function saveMatNum(){try{localStorage.setItem("matNum",String(matNum));}catch(e){}}
 function loadHistory(){try{return JSON.parse(localStorage.getItem("alfonso_history")||"[]");}catch(e){return[];}}
 function saveHistory(){try{localStorage.setItem("alfonso_history",JSON.stringify(invoiceHistory));}catch(e){}}
-const DEFAULT_CONTRACTOR_INFO={name:"Alfonso Sanchez Property Services",address:"310 Main Ave Apt 1, Long Beach CA 90802",phone:"562-533-7907",mode:"bplw"};
-function loadContractorInfo(){
-  try{
-    const saved=JSON.parse(localStorage.getItem("contractor_info"));
-    if(saved&&saved.name)return {mode:"bplw",...saved};
-  }catch(e){}
-  return {...DEFAULT_CONTRACTOR_INFO};
-}
-function saveContractorInfo(){try{localStorage.setItem("contractor_info",JSON.stringify(contractorInfo));}catch(e){}}
 function recordInvoiceHistory(type,invNum){
   if(!invoiceData)return;
   // Avoid duplicate entries if the same invoice is shared/downloaded multiple times
