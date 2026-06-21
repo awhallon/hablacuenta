@@ -856,6 +856,56 @@ async function testAiStatedWrongYearGetsCorrected() {
   check("Unrelated replies with no year pattern pass through completely untouched", stillUnrelated === unrelatedReply);
 }
 
+async function testFormattedSummaryPhoneFormatting() {
+  console.log("\n=== TEST SUITE 15: Formatted Summary Phone Number Formatting (regression for Adrian's reported bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // Reproduce the exact raw AI summary text from Adrian's screenshot, with an unformatted phone number
+  const rawSummary = "Here's what I have:\n\nClient: Andrew Whallon\nClient Address: 1995 Canal Avenue\nClient Email: andywhallon@yahoo.com\nClient Phone: 5628828632\nJob Address: 1995 Canal Avenue, Long Beach California 90810\n\nWork Performed:\n- Repair the sprinkler system - $500.00\n\nDate Completed: June 16, 2026\n\nIs everything correct?";
+
+  win.eval(`showFormattedSummary(${JSON.stringify(rawSummary)})`);
+  const chatHtml = win.document.getElementById("chatBox").innerHTML;
+  check("Formatted summary shows the phone number reformatted as xxx-xxx-xxxx",
+    chatHtml.includes("562-882-8632"), `chat HTML: ${chatHtml.slice(0,400)}`);
+  check("Formatted summary no longer shows the raw unformatted digits",
+    !chatHtml.includes("5628828632"));
+  check("Formatted summary still preserves the email address correctly",
+    chatHtml.includes("andywhallon@yahoo.com"));
+  check("Formatted summary still preserves the client name",
+    chatHtml.includes("Andrew Whallon"));
+
+  // Test with a Spanish label too
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  const rawSummaryEs = "Cliente: Andrew Whallon\nTeléfono: 5628828632\nDirección del trabajo: 1995 Canal Avenue";
+  win2.eval(`showFormattedSummary(${JSON.stringify(rawSummaryEs)})`);
+  const chatHtmlEs = win2.document.getElementById("chatBox").innerHTML;
+  check("Spanish 'Teléfono' label phone number also gets reformatted",
+    chatHtmlEs.includes("562-882-8632"));
+
+  // Test that a summary with no phone number at all doesn't error or get mangled
+  const dom3 = freshDom();
+  const win3 = dom3.window;
+  await wait(300);
+  const rawSummaryNoPhone = "Client: Test Client\nJob Address: 123 Main St\nDate: June 16, 2026";
+  win3.eval(`showFormattedSummary(${JSON.stringify(rawSummaryNoPhone)})`);
+  const chatHtmlNoPhone = win3.document.getElementById("chatBox").innerHTML;
+  check("Summary with no phone number renders without error", chatHtmlNoPhone.includes("Test Client"));
+
+  // Test a phone number already in the correct format isn't double-mangled
+  const dom4 = freshDom();
+  const win4 = dom4.window;
+  await wait(300);
+  const rawSummaryFormatted = "Client: Test Client\nClient Phone: 562-882-8632\nJob Address: 123 Main St";
+  win4.eval(`showFormattedSummary(${JSON.stringify(rawSummaryFormatted)})`);
+  const chatHtmlFormatted = win4.document.getElementById("chatBox").innerHTML;
+  check("An already-correctly-formatted phone number passes through unchanged",
+    chatHtmlFormatted.includes("562-882-8632") && !chatHtmlFormatted.includes("562-882-882-8632"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -872,6 +922,7 @@ async function testAiStatedWrongYearGetsCorrected() {
     await testDateYearValidation();
     await testJobAddressConfirmationDoesNotRetrigger();
     await testAiStatedWrongYearGetsCorrected();
+    await testFormattedSummaryPhoneFormatting();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
