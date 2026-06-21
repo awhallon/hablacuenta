@@ -138,7 +138,8 @@ input[type=file]{display:none;}
       <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Business Name (shown on invoices — leave blank to use your first/last name)</label>
       <input id="setBusinessName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
       <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Address</label>
-      <input id="setAddress" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
+      <input id="setAddress" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:6px;">
+      <button type="button" class="text-btn" style="margin-top:0;margin-bottom:12px;" onclick="startSettingsGuidedAddress()">📍 Fill in step by step</button>
       <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Phone</label>
       <input id="setPhone" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:16px;">
       <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Billing Setup</label>
@@ -270,25 +271,119 @@ function saveClientAddress(clientName, addr){
 }
 
 // New address collection state
-let newAddrState = null; // tracks multi-step address entry
+let guidedAddrState = null; // unified multi-step address entry: purpose = "client" | "job" | "contractor" | "bplw"
 
-function startNewAddress(){
-  newAddrState = {step:"street_name", data:{}};
-  addAIMsg(t("¿Cuál es el nombre de la calle? (ej: Main Street)","What is the street name? (e.g. Main Street)"));
-  document.getElementById("chipArea").innerHTML="";
-}
-
-let newClientState=null; // tracks guided new-client entry flow
-let newJobAddrState=null; // tracks guided job-site address entry flow (generic mode)
-
-function startNewJobAddress(){
-  newJobAddrState={step:"street",data:{}};
+function startGuidedAddress(purpose, meta){
+  guidedAddrState = {purpose, meta:meta||{}, step:"street", data:{}};
   addAIMsg(t(
-    "Vamos a agregar la dirección del trabajo. Te voy a preguntar lo siguiente:\n1. Dirección de la calle\n2. Número de unidad o suite (si hay)\n3. Ciudad\n4. Estado\n5. Código postal\n\n¿Cuál es la dirección de la calle?",
-    "We're going to add the job site address. I'm going to ask you for the following information:\n1. Street address\n2. Unit or suite number, if there is one\n3. City\n4. State\n5. Zip code\n\nWhat is the street address?"
+    "Vamos a agregar la dirección. Te voy a preguntar lo siguiente:\n1. Dirección de la calle\n2. Número de unidad o suite (si hay)\n3. Ciudad\n4. Estado\n5. Código postal\n\n¿Cuál es la dirección de la calle?",
+    "We're going to add the address. I'm going to ask you for the following information:\n1. Street address\n2. Unit or suite number, if there is one\n3. City\n4. State\n5. Zip code\n\nWhat is the street address?"
   ));
   document.getElementById("chipArea").innerHTML="";
 }
+
+function handleGuidedAddressInput(text){
+  if(!guidedAddrState) return false;
+  const s=guidedAddrState.step;
+  const lower=text.toLowerCase().trim();
+  const isSkip=lower==="omitir"||lower==="skip";
+
+  if(s==="street"){
+    guidedAddrState.data.street=isSkip?"":text.trim();
+    guidedAddrState.step="unit_yn";
+    addAIMsg(t("¿Hay número o letra de apartamento/suite/unidad? Si sí, escríbelo directamente. Si no, escribe No.","Is there a suite, unit, or apartment number? If yes, type it. If no, type No."));
+    showYesNoChips();
+    return true;
+  }
+  if(s==="unit_yn"){
+    const isNo=lower==="no"||lower==="nope"||lower==="none"||lower==="n";
+    const isYes=lower==="yes"||lower==="sí"||lower==="si"||lower==="y";
+    if(isSkip||isNo){
+      guidedAddrState.data.unit="";
+    } else {
+      guidedAddrState.data.unit=text.trim();
+      if(isYes){
+        guidedAddrState.step="unit_number";
+        addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the suite/unit number or letter?"));
+        return true;
+      }
+    }
+    guidedAddrState.step="city";
+    addAIMsg(t("¿Cuál es la ciudad?","What city?"));
+    return true;
+  }
+  if(s==="unit_number"){
+    guidedAddrState.data.unit=isSkip?"":text.trim();
+    guidedAddrState.step="city";
+    addAIMsg(t("¿Cuál es la ciudad?","What city?"));
+    return true;
+  }
+  if(s==="city"){
+    guidedAddrState.data.city=isSkip?"":text.trim();
+    guidedAddrState.step="state";
+    addAIMsg(t("¿Cuál es el estado?","What state?"));
+    return true;
+  }
+  if(s==="state"){
+    guidedAddrState.data.state=isSkip?"":text.trim();
+    guidedAddrState.step="zip";
+    addAIMsg(t("¿Cuál es el código postal?","What zip code?"));
+    return true;
+  }
+  if(s==="zip"){
+    guidedAddrState.data.zip=isSkip?"":text.trim();
+    const a=guidedAddrState.data;
+    const unitPart=(a.unit&&a.unit.trim())?` Unit ${a.unit.trim()}`:"";
+    const cityStateZip=[a.city,a.state,a.zip].filter(Boolean).join(a.state||a.zip?" ":", ");
+    const fullAddress=[`${(a.street||"").trim()}${unitPart}`,cityStateZip].filter(Boolean).join(", ");
+    completeGuidedAddress(guidedAddrState.purpose, guidedAddrState.meta, fullAddress, a);
+    guidedAddrState=null;
+    return true;
+  }
+  return false;
+}
+
+function completeGuidedAddress(purpose, meta, fullAddress, parts){
+  if(purpose==="job"){
+    convStage="tasks";
+    addAIMsg(t(`Dirección guardada: ${fullAddress}.`,`Address saved: ${fullAddress}.`));
+    const handoffMsg=`[App note: the job address has already been fully collected as "${fullAddress}" — do NOT ask for it again. Proceed directly to the next step of the invoice.] The job address is ${fullAddress}.`;
+    lastUserText=handoffMsg;
+    addUserMsg(fullAddress);
+    callClaude(handoffMsg,false);
+    return;
+  }
+  if(purpose==="client"){
+    // Hand back to the new-client flow with the assembled address
+    if(newClientState){
+      newClientState.data.address=fullAddress;
+      newClientState.step="email";
+      addAIMsg(t("¿Cuál es el email del cliente? (Puedes omitir esto por ahora.)","What is the client's email? (You can skip this for now.)"));
+      showSkipChip();
+    }
+    return;
+  }
+  if(purpose==="contractor"){
+    addAIMsg(t(`Dirección guardada: ${fullAddress}. Revisa y guarda en Configuración.`,`Address saved: ${fullAddress}. Review and save it on the Settings screen.`));
+    showSettings();
+    document.getElementById("setAddress").value=fullAddress;
+    return;
+  }
+  if(purpose==="bplw"){
+    const unitPart=(parts.unit&&parts.unit.trim())?` Unit ${parts.unit.trim()}`:"";
+    const display=`${(parts.street||"").trim()}${unitPart}`;
+    const addr={id:"custom_"+Date.now(), display, full:fullAddress};
+    const clientName=meta.clientName||currentOrderedBy||"Unknown";
+    saveClientAddress(clientName, addr);
+    addAIMsg(`Address saved: ${fullAddress}`);
+    lastUserText=fullAddress;
+    addUserMsg(fullAddress);
+    callClaude(fullAddress,false);
+    return;
+  }
+}
+
+let newClientState=null; // tracks guided new-client entry flow
 
 function startNewClient(){
   newClientState={step:"name",data:{}};
@@ -337,13 +432,12 @@ function handleNewClientInput(text){
 
   if(s==="name"){
     newClientState.data.name=isSkip?"":text.trim();
-    newClientState.step="addr_street";
-    newClientState.data.addr={};
-    addAIMsg(t("¿Cuál es la dirección de la calle del cliente? (Puedes omitir todo esto.)","What is the client's street address? (You can skip this entirely.)"));
+    newClientState.step="awaiting_address";
+    addAIMsg(t("¿Quieres agregar la dirección del cliente ahora? Puedes omitir esto.","Want to add the client's address now? You can skip this."));
     showSkipChip();
     return true;
   }
-  if(s==="addr_street"){
+  if(s==="awaiting_address"){
     if(isSkip){
       newClientState.data.address="";
       newClientState.step="email";
@@ -351,60 +445,7 @@ function handleNewClientInput(text){
       showSkipChip();
       return true;
     }
-    newClientState.data.addr.street=text.trim();
-    newClientState.step="addr_unit_yn";
-    addAIMsg(t("¿Hay número o letra de apartamento/suite/unidad? Si sí, escríbelo directamente. Si no, escribe No.","Is there a suite, unit, or apartment number? If yes, type it. If no, type No."));
-    showYesNoChips();
-    return true;
-  }
-  if(s==="addr_unit_yn"){
-    const isNo=lower==="no"||lower==="nope"||lower==="none"||lower==="n";
-    const isYes=lower==="yes"||lower==="sí"||lower==="si"||lower==="y";
-    const isDirectUnit=!isNo&&!isYes&&!isSkip&&text.trim().length>0&&text.trim().length<12;
-    if(isSkip||isNo){
-      newClientState.data.addr.unit="";
-      newClientState.step="addr_city";
-      addAIMsg(t("¿Cuál es la ciudad?","What city?"));
-    } else if(isDirectUnit){
-      newClientState.data.addr.unit=text.trim();
-      newClientState.step="addr_city";
-      addAIMsg(t("¿Cuál es la ciudad?","What city?"));
-    } else if(isYes){
-      newClientState.step="addr_unit_number";
-      addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the suite/unit number or letter?"));
-    } else {
-      newClientState.step="addr_unit_number";
-      addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the suite/unit number or letter?"));
-    }
-    return true;
-  }
-  if(s==="addr_unit_number"){
-    newClientState.data.addr.unit=isSkip?"":text.trim();
-    newClientState.step="addr_city";
-    addAIMsg(t("¿Cuál es la ciudad?","What city?"));
-    return true;
-  }
-  if(s==="addr_city"){
-    newClientState.data.addr.city=isSkip?"":text.trim();
-    newClientState.step="addr_state";
-    addAIMsg(t("¿Cuál es el estado?","What state?"));
-    return true;
-  }
-  if(s==="addr_state"){
-    newClientState.data.addr.state=isSkip?"":text.trim();
-    newClientState.step="addr_zip";
-    addAIMsg(t("¿Cuál es el código postal?","What zip code?"));
-    return true;
-  }
-  if(s==="addr_zip"){
-    newClientState.data.addr.zip=isSkip?"":text.trim();
-    const a=newClientState.data.addr;
-    const unitPart=(a.unit&&a.unit.trim())?` Unit ${a.unit.trim()}`:"";
-    const cityStateZip=[a.city,a.state,a.zip].filter(Boolean).join(a.state||a.zip?" ":", ");
-    newClientState.data.address=[`${(a.street||"").trim()}${unitPart}`,cityStateZip].filter(Boolean).join(", ");
-    newClientState.step="email";
-    addAIMsg(t("¿Cuál es el email del cliente? (Puedes omitir esto por ahora.)","What is the client's email? (You can skip this for now.)"));
-    showSkipChip();
+    startGuidedAddress("client");
     return true;
   }
   if(s==="email"){
@@ -478,147 +519,10 @@ function handleNewClientInput(text){
   return false;
 }
 
-function handleNewJobAddrInput(text){
-  if(!newJobAddrState) return false;
-  const s=newJobAddrState.step;
-  const lower=text.toLowerCase().trim();
-  const isSkip=lower==="omitir"||lower==="skip";
-
-  if(s==="street"){
-    newJobAddrState.data.street=isSkip?"":text.trim();
-    newJobAddrState.step="unit_yn";
-    addAIMsg(t("¿Hay número o letra de apartamento/suite/unidad? Si sí, escríbelo directamente. Si no, escribe No.","Is there a suite, unit, or apartment number? If yes, type it. If no, type No."));
-    showYesNoChips();
-    return true;
-  }
-  if(s==="unit_yn"){
-    const isNo=lower==="no"||lower==="nope"||lower==="none"||lower==="n";
-    const isYes=lower==="yes"||lower==="sí"||lower==="si"||lower==="y";
-    if(isSkip||isNo){
-      newJobAddrState.data.unit="";
-    } else {
-      newJobAddrState.data.unit=text.trim();
-      if(isYes){
-        newJobAddrState.step="unit_number";
-        addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the suite/unit number or letter?"));
-        return true;
-      }
-    }
-    newJobAddrState.step="city";
-    addAIMsg(t("¿Cuál es la ciudad?","What city?"));
-    return true;
-  }
-  if(s==="unit_number"){
-    newJobAddrState.data.unit=isSkip?"":text.trim();
-    newJobAddrState.step="city";
-    addAIMsg(t("¿Cuál es la ciudad?","What city?"));
-    return true;
-  }
-  if(s==="city"){
-    newJobAddrState.data.city=isSkip?"":text.trim();
-    newJobAddrState.step="state";
-    addAIMsg(t("¿Cuál es el estado?","What state?"));
-    return true;
-  }
-  if(s==="state"){
-    newJobAddrState.data.state=isSkip?"":text.trim();
-    newJobAddrState.step="zip";
-    addAIMsg(t("¿Cuál es el código postal?","What zip code?"));
-    return true;
-  }
-  if(s==="zip"){
-    newJobAddrState.data.zip=isSkip?"":text.trim();
-    const a=newJobAddrState.data;
-    const unitPart=(a.unit&&a.unit.trim())?` Unit ${a.unit.trim()}`:"";
-    const cityStateZip=[a.city,a.state,a.zip].filter(Boolean).join(a.state||a.zip?" ":", ");
-    const fullAddress=[`${(a.street||"").trim()}${unitPart}`,cityStateZip].filter(Boolean).join(", ");
-    newJobAddrState=null;
-    convStage="tasks";
-    addAIMsg(t(`Dirección guardada: ${fullAddress}.`,`Address saved: ${fullAddress}.`));
-    const handoffMsg=`[App note: the job address has already been fully collected as "${fullAddress}" — do NOT ask for it again. Proceed directly to the next step of the invoice.] The job address is ${fullAddress}.`;
-    lastUserText=handoffMsg;
-    addUserMsg(fullAddress);
-    callClaude(handoffMsg,false);
-    return true;
-  }
-  return false;
-}
-
 function handleNewAddressInput(text){
   if(!newAddrState) return false;
   const s = newAddrState.step;
-  if(s==="street_name"){
-    // Capitalize each word
-    let sn = text.trim().split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
-    // Append Ave if no street type given
-    const hasType = /\b(ave|avenue|st|street|blvd|boulevard|dr|drive|rd|road|ln|lane|way|ct|court)\b/i.test(sn);
-    if(!hasType) sn = sn + ' Ave';
-    newAddrState.data.streetName=sn;
-    newAddrState.step="street_number";
-    addAIMsg(t("¿Cuál es el número de la calle?","What is the street number?"));
-    return true;
-  }
-  if(s==="street_number"){
-    newAddrState.data.streetNumber=text;
-    newAddrState.step="unit_yn";
-    addAIMsg(t("¿Hay número o letra de apartamento/unidad? Si sí, escríbelo directamente.","Is there a unit/apartment number? If yes, type it. If no, type No."));
-    showYesNoChips();
-    return true;
-  }
-  if(s==="unit_yn"){
-    const lower=text.toLowerCase().trim();
-    const isNo=lower==="no"||lower==="nope"||lower==="none"||lower==="n";
-    const isYes=lower==="yes"||lower==="sí"||lower==="si"||lower==="y";
-    // If they typed a number/letter directly, treat as the unit itself
-    const isDirectUnit=!isNo&&!isYes&&text.trim().length>0&&text.trim().length<10;
-    if(isNo){
-      newAddrState.data.unit="";
-      newAddrState.step="city";
-      addAIMsg(t("¿Cuál es la ciudad?","What is the city?"));
-    } else if(isYes){
-      newAddrState.step="unit_number";
-      addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the unit number or letter?"));
-    } else if(isDirectUnit){
-      // They typed the unit directly
-      newAddrState.data.unit=text.trim();
-      newAddrState.step="city";
-      addAIMsg(t("¿Cuál es la ciudad?","What is the city? (e.g. Long Beach)"));
-    } else {
-      newAddrState.step="unit_number";
-      addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the unit number or letter?"));
-    }
-    return true;
-  }
-  if(s==="unit_number"){
-    newAddrState.data.unit=text;
-    newAddrState.step="city";
-    addAIMsg(t("¿Cuál es la ciudad?","What is the city?"));
-    return true;
-  }
-  if(s==="city"){
-    newAddrState.data.city=text;
-    newAddrState.step="zip";
-    addAIMsg(t("¿Cuál es el código postal?","What is the zip code?"));
-    return true;
-  }
-  if(s==="zip"){
-    newAddrState.data.zip=text;
-    // Build full address
-    const d=newAddrState.data;
-    const unitPart=(d.unit&&d.unit.trim())?` Unit ${d.unit.trim()}`:"";
-    const full=`${d.streetNumber.trim()} ${d.streetName.trim()}${unitPart}, ${d.city.trim()} ${d.zip.trim()}`;
-    const display=`${d.streetNumber.trim()} ${d.streetName.trim()}${unitPart}`;
-    const addr={id:"custom_"+Date.now(), display, full};
-    const clientName = currentOrderedBy || "Unknown";
-    saveClientAddress(clientName, addr);
-    newAddrState=null;
-    addAIMsg(`Address saved: ${full}`);
-    lastUserText=full;
-    addUserMsg(full);
-    callClaude(full, false);
-    return true;
-  }
-  // Handle field edit
+  // Handle field edit (from the Address Manager's per-field correction screen)
   if(s==="edit_field"){
     const d=newAddrState.data;
     const field=d.field;
@@ -857,6 +761,11 @@ function hideSettings(){
   document.getElementById("settingsPanel").style.display="none";
   document.getElementById("mainPanel").style.display="block";
 }
+function startSettingsGuidedAddress(){
+  hideAllPanels();
+  document.getElementById("mainPanel").style.display="block";
+  startGuidedAddress("contractor");
+}
 function saveSettingsForm(){
   const firstName=document.getElementById("setFirstName").value.trim();
   const lastName=document.getElementById("setLastName").value.trim();
@@ -930,7 +839,7 @@ function continueIncomplete(i){
 }
 
 function resetChat(){
-  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;newClientState=null;newJobAddrState=null;showBackBtn(false);
+  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;newClientState=null;guidedAddrState=null;showBackBtn(false);
   document.getElementById("chatBox").innerHTML="";
   document.getElementById("chipArea").innerHTML="";
   document.getElementById("invoiceArea").innerHTML="";
@@ -1020,9 +929,7 @@ function showAddressChips(){
   const addChip=document.createElement("div");addChip.className="chip new";
   addChip.textContent=t("+ Nueva dirección","+ Add new address");
   addChip.onclick=()=>{
-    area.innerHTML="";
-    newAddrState={step:"street_name",data:{}};
-    addAIMsg(t("¿Cuál es el nombre de la calle? (ej: Main Street)","What is the street name? (e.g. Main Street)"));
+    startGuidedAddress("bplw",{clientName:currentOrderedBy});
   };
   area.appendChild(addChip);
 }
@@ -1171,7 +1078,7 @@ function smartChips(reply){
   }
   // Job address / location question
   if(lower.includes("which address")||lower.includes("which street")||lower.includes("what street")||lower.includes("street is the job")||lower.includes("street was the work")||lower.includes("job location")||lower.includes("job address")||lower.includes("where was the job")||lower.includes("location of the job")||lower.includes("address was the job")||lower.includes("address of the job")){
-    if(contractorInfo.mode==="generic"){ startNewJobAddress(); return; }
+    if(contractorInfo.mode==="generic"){ startGuidedAddress("job"); return; }
     setChips("street"); return;
   }
   // Receipt photo prompt
@@ -1401,7 +1308,14 @@ function goBack(){
 function sendMsg(){
   const inp=document.getElementById("userInput");const text=inp.value.trim();if(!text)return;
   lastUserText=text;
-  // Handle new address flow
+  // Unified guided address flow takes priority — it can be active alongside newClientState
+  // (e.g. mid-way through collecting a new client's address)
+  if(guidedAddrState){
+    addUserMsg(text);inp.value="";
+    handleGuidedAddressInput(text);
+    return;
+  }
+  // Handle legacy BPLW address edit flow
   if(newAddrState){
     addUserMsg(text);inp.value="";
     handleNewAddressInput(text);
@@ -1411,12 +1325,6 @@ function sendMsg(){
   if(newClientState){
     addUserMsg(text);inp.value="";
     handleNewClientInput(text);
-    return;
-  }
-  // Handle new job address flow (generic mode)
-  if(newJobAddrState){
-    addUserMsg(text);inp.value="";
-    handleNewJobAddrInput(text);
     return;
   }
   addUserMsg(text);inp.value="";callClaude(text,false);
@@ -1808,9 +1716,8 @@ function startAddressManagerAdd(){
   const clientName=document.getElementById("addrClientSelect").value;
   currentOrderedBy=clientName;
   hideAddressManager();
-  newAddrState={step:"street_name",data:{}};
   document.getElementById("chatBox").innerHTML="";
-  addAIMsg(`Adding new address for ${clientName}. What is the street name?`);
+  startGuidedAddress("bplw",{clientName});
 }
 
 function applyContractorInfoToHeader(){
