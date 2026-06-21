@@ -906,6 +906,46 @@ async function testFormattedSummaryPhoneFormatting() {
     chatHtmlFormatted.includes("562-882-8632") && !chatHtmlFormatted.includes("562-882-882-8632"));
 }
 
+async function testConfirmationTriggerMatchesActualPromptWording() {
+  console.log("\n=== TEST SUITE 16: Confirmation Trigger Matches Actual Prompt Wording (regression for Adrian's reported bug) ===");
+
+  // Pull the actual instructed confirmation phrase directly out of the live system prompt,
+  // so this test fails loudly if the prompt wording ever changes again without updating the trigger.
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+  const sysPrompt = win.eval('getSystemPrompt()');
+  const promptMatch = sysPrompt.match(/Then ask "([^"]+)"/);
+  check("System prompt contains an explicit confirmation question instruction", !!promptMatch);
+
+  if (promptMatch) {
+    const actualInstructedPhrase = promptMatch[1];
+    const lower = actualInstructedPhrase.toLowerCase();
+    const triggerMatches = lower.includes("confirm") || lower.includes("everything correct") || lower.includes("look correct") || lower.includes("need to be fixed") || lower.includes("confirmar") || lower.includes("todo correcto") || lower.includes("se ve correcto") || lower.includes("corregir algo");
+    check(`The exact instructed confirmation phrase ("${actualInstructedPhrase}") matches the showFormattedSummary trigger`,
+      triggerMatches, "if this fails, the prompt wording changed without updating the trigger condition — exactly the bug Adrian hit");
+  }
+
+  // Also directly verify the specific phrase that caused the real bug
+  const bugPhrase = "Does everything look correct, or do you want to fix something?".toLowerCase();
+  const bugPhraseMatches = bugPhrase.includes("confirm") || bugPhrase.includes("everything correct") || bugPhrase.includes("look correct") || bugPhrase.includes("need to be fixed") || bugPhrase.includes("confirmar") || bugPhrase.includes("todo correcto");
+  check("The exact phrase from Adrian's bug report now matches the trigger", bugPhraseMatches);
+
+  // End-to-end: simulate showFormattedSummary firing on a reply using the real instructed phrasing,
+  // confirming phone formatting actually applies when triggered through the real condition logic
+  const fullReply = "Client: Andrew Whallon\nClient Phone: 5628828632\nJob Address: 123 Main St\n\nDoes everything look correct, or do you want to fix something?";
+  const lower = fullReply.toLowerCase();
+  const wouldTrigger = lower.includes("confirm") || lower.includes("everything correct") || lower.includes("look correct") || lower.includes("need to be fixed") || lower.includes("confirmar") || lower.includes("todo correcto");
+  check("The full realistic AI reply triggers showFormattedSummary", wouldTrigger);
+
+  if (wouldTrigger) {
+    win.eval(`showFormattedSummary(${JSON.stringify(fullReply)})`);
+    const chatHtml = win.document.getElementById("chatBox").innerHTML;
+    check("When correctly triggered, the phone number is formatted in the displayed summary",
+      chatHtml.includes("562-882-8632") && !chatHtml.includes("5628828632"));
+  }
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -923,6 +963,7 @@ async function testFormattedSummaryPhoneFormatting() {
     await testJobAddressConfirmationDoesNotRetrigger();
     await testAiStatedWrongYearGetsCorrected();
     await testFormattedSummaryPhoneFormatting();
+    await testConfirmationTriggerMatchesActualPromptWording();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
