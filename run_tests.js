@@ -522,6 +522,90 @@ async function testClientHandoffMessage() {
     retryText.includes("do NOT ask for these again"));
 }
 
+async function testGenericJobAddressFlow() {
+  console.log("\n=== TEST SUITE 10: Guided Job-Address Flow (Generic Mode) — regression for Adrian's reported bug ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`contractorInfo.mode = "generic"; invoiceType = "labor"; currentOrderedBy = "";`);
+
+  // Simulate the AI asking for job address — should trigger the guided flow, not accept free text directly
+  win.eval(`smartChips("Great! Andrew Whallon it is. What's the job address?")`);
+  check("Job address question triggers guided flow in generic mode", win.eval('newJobAddrState !== null'));
+  check("Guided flow starts at street step", win.eval('newJobAddrState.step') === "street");
+
+  const introHtml = win.document.getElementById("chatBox").innerHTML;
+  check("Intro message lists all 5 fields it will ask about",
+    introHtml.includes("Street address") && introHtml.includes("Unit") && introHtml.includes("City") && introHtml.includes("State") && introHtml.includes("Zip"));
+
+  // Walk through the full flow with a unit number, matching Adrian's real address structure
+  win.eval(`document.getElementById("userInput").value = "1993 Canal Avenue"; sendMsg();`);
+  check("Street step advances to unit_yn", win.eval('newJobAddrState.step') === "unit_yn");
+  check("Street stored correctly", win.eval('newJobAddrState.data.street') === "1993 Canal Avenue");
+
+  win.eval(`document.getElementById("userInput").value = "No"; sendMsg();`);
+  check("Saying No to unit skips straight to city", win.eval('newJobAddrState.step') === "city");
+  check("Unit stored as blank", win.eval('newJobAddrState.data.unit') === "");
+
+  win.eval(`document.getElementById("userInput").value = "Long Beach"; sendMsg();`);
+  check("City step advances to state", win.eval('newJobAddrState.step') === "state");
+
+  win.eval(`document.getElementById("userInput").value = "CA"; sendMsg();`);
+  check("State step advances to zip", win.eval('newJobAddrState.step') === "zip");
+
+  win.eval(`document.getElementById("userInput").value = "90810"; sendMsg();`);
+  await wait(100);
+  check("After zip, newJobAddrState is cleared (flow complete)", win.eval('newJobAddrState') === null);
+  check("convStage advances to tasks after job address complete", win.eval('convStage') === "tasks");
+
+  const handoffMsg = win.eval('messages[messages.length-1].content');
+  check("Handoff message includes the full built address", handoffMsg.includes("1993 Canal Avenue") && handoffMsg.includes("Long Beach") && handoffMsg.includes("CA") && handoffMsg.includes("90810"));
+  check("Handoff message tells AI not to re-ask for address", handoffMsg.includes("do NOT ask for it again"));
+
+  const chatHtml = win.document.getElementById("chatBox").innerHTML;
+  check("Visible chat shows the clean built address, not the internal instruction", chatHtml.includes("1993 Canal Avenue") && !chatHtml.includes("App note:"));
+
+  // Test the explicit-unit path
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval(`contractorInfo.mode = "generic"; invoiceType = "labor";`);
+  win2.eval(`smartChips("What's the job address?")`);
+  win2.eval(`document.getElementById("userInput").value = "500 Main St"; sendMsg();`);
+  win2.eval(`document.getElementById("userInput").value = "Yes"; sendMsg();`);
+  check("Saying Yes to unit moves to unit_number step", win2.eval('newJobAddrState.step') === "unit_number");
+  win2.eval(`document.getElementById("userInput").value = "Apt 4B"; sendMsg();`);
+  check("Unit number step advances to city", win2.eval('newJobAddrState.step') === "city");
+  check("Unit stored correctly", win2.eval('newJobAddrState.data.unit') === "Apt 4B");
+  win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // city
+  win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // state
+  win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // zip
+  await wait(100);
+  const handoffMsg2 = win2.eval('messages[messages.length-1].content');
+  check("Address with unit but skipped city/state/zip still includes street and unit", handoffMsg2.includes("500 Main St") && handoffMsg2.includes("Apt 4B"));
+
+  // Confirm BPLW mode is completely unaffected — should still use the original chip-based picker, not this new flow
+  const dom3 = freshDom();
+  const win3 = dom3.window;
+  await wait(300);
+  win3.eval(`currentOrderedBy = "Andrew Whallon";`); // BPLW mode default stays
+  win3.eval(`smartChips("Which address was the job at?")`);
+  check("BPLW mode does NOT trigger the new guided job-address flow", win3.eval('newJobAddrState') === null);
+  const bplwChipArea = win3.document.getElementById("chipArea").innerHTML;
+  check("BPLW mode still shows the original address chips", bplwChipArea.includes("chip"));
+
+  // Confirm resetChat clears any in-progress newJobAddrState
+  const dom4 = freshDom();
+  const win4 = dom4.window;
+  await wait(300);
+  win4.eval(`contractorInfo.mode = "generic";`);
+  win4.eval('startNewJobAddress()');
+  check("newJobAddrState set before reset", win4.eval('newJobAddrState') !== null);
+  win4.eval('resetChat()');
+  check("resetChat() clears in-progress newJobAddrState", win4.eval('newJobAddrState') === null);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -533,6 +617,7 @@ async function testClientHandoffMessage() {
     await testNewClientFlow();
     await testPhoneFormatting();
     await testClientHandoffMessage();
+    await testGenericJobAddressFlow();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
