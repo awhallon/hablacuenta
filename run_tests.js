@@ -296,10 +296,10 @@ async function testNewClientFlow() {
 
   // Provide a name
   win.eval(`document.getElementById("userInput").value = "Maria Lopez"; sendMsg();`);
-  check("After name, step advances to addr_street", win.eval('newClientState.step') === "addr_street");
+  check("After name, step advances to awaiting_address", win.eval('newClientState.step') === "awaiting_address");
   check("Name was stored correctly", win.eval('newClientState.data.name') === "Maria Lopez");
 
-  // Skip address
+  // Skip address entirely
   win.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`);
   check("After skipping address, step advances to email", win.eval('newClientState.step') === "email");
   check("Skipped address stored as blank, not 'Skip'", win.eval('newClientState.data.address') === "");
@@ -352,33 +352,39 @@ async function testNewClientFlow() {
   const saved2 = savedClients2.find(c => c.name === "Corrected Name");
   check("Corrected name was the one actually saved (not the original typo)", !!saved2);
 
-  // Test the full structured address sub-flow with a unit number
+  // Test the full unified guided address flow with a unit number, launched via the client flow
   const dom4 = freshDom();
   const win4 = dom4.window;
   await wait(300);
   win4.eval('startNewClient()');
   win4.eval(`document.getElementById("userInput").value = "Sam Rivera"; sendMsg();`);
-  check("Name step advances to addr_street", win4.eval('newClientState.step') === "addr_street");
+  check("Name step advances to awaiting_address", win4.eval('newClientState.step') === "awaiting_address");
+
+  // Saying anything other than Skip should launch the unified guided address flow
+  win4.eval(`document.getElementById("userInput").value = "Yes"; sendMsg();`);
+  check("guidedAddrState launched with client purpose", win4.eval('guidedAddrState !== null && guidedAddrState.purpose') === "client");
+  check("guidedAddrState starts at street step", win4.eval('guidedAddrState.step') === "street");
 
   win4.eval(`document.getElementById("userInput").value = "1234 Ocean Blvd"; sendMsg();`);
-  check("Street step advances to addr_unit_yn", win4.eval('newClientState.step') === "addr_unit_yn");
-  check("Street stored correctly", win4.eval('newClientState.data.addr.street') === "1234 Ocean Blvd");
+  check("Street step advances to unit_yn", win4.eval('guidedAddrState.step') === "unit_yn");
+  check("Street stored correctly", win4.eval('guidedAddrState.data.street') === "1234 Ocean Blvd");
 
   win4.eval(`document.getElementById("userInput").value = "Yes"; sendMsg();`);
-  check("Saying Yes to unit moves to addr_unit_number", win4.eval('newClientState.step') === "addr_unit_number");
+  check("Saying Yes to unit moves to unit_number", win4.eval('guidedAddrState.step') === "unit_number");
 
   win4.eval(`document.getElementById("userInput").value = "Suite 200"; sendMsg();`);
-  check("Unit number step advances to addr_city", win4.eval('newClientState.step') === "addr_city");
-  check("Unit stored correctly", win4.eval('newClientState.data.addr.unit') === "Suite 200");
+  check("Unit number step advances to city", win4.eval('guidedAddrState.step') === "city");
+  check("Unit stored correctly", win4.eval('guidedAddrState.data.unit') === "Suite 200");
 
   win4.eval(`document.getElementById("userInput").value = "Long Beach"; sendMsg();`);
-  check("City step advances to addr_state", win4.eval('newClientState.step') === "addr_state");
+  check("City step advances to state", win4.eval('guidedAddrState.step') === "state");
 
   win4.eval(`document.getElementById("userInput").value = "CA"; sendMsg();`);
-  check("State step advances to addr_zip", win4.eval('newClientState.step') === "addr_zip");
+  check("State step advances to zip", win4.eval('guidedAddrState.step') === "zip");
 
   win4.eval(`document.getElementById("userInput").value = "90802"; sendMsg();`);
-  check("Zip step advances to email", win4.eval('newClientState.step') === "email");
+  check("After zip, guidedAddrState is cleared (handed back to client flow)", win4.eval('guidedAddrState') === null);
+  check("Client flow resumes at email step", win4.eval('newClientState.step') === "email");
   const builtAddress = win4.eval('newClientState.data.address');
   check("Built address includes street", builtAddress.includes("1234 Ocean Blvd"));
   check("Built address includes unit", builtAddress.includes("Suite 200"));
@@ -392,25 +398,27 @@ async function testNewClientFlow() {
   await wait(300);
   win5.eval('startNewClient()');
   win5.eval(`document.getElementById("userInput").value = "Jane Doe"; sendMsg();`);
+  win5.eval(`document.getElementById("userInput").value = "Yes"; sendMsg();`); // wants to add address
   win5.eval(`document.getElementById("userInput").value = "500 Main St"; sendMsg();`);
   win5.eval(`document.getElementById("userInput").value = "No"; sendMsg();`);
-  check("Saying No to unit skips straight to addr_city", win5.eval('newClientState.step') === "addr_city");
-  check("Unit correctly stored as blank when answered No", win5.eval('newClientState.data.addr.unit') === "");
+  check("Saying No to unit skips straight to city", win5.eval('guidedAddrState.step') === "city");
+  check("Unit correctly stored as blank when answered No", win5.eval('guidedAddrState.data.unit') === "");
   win5.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // city
   win5.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // state
   win5.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // zip
-  check("After skipping city/state/zip, reaches email step", win5.eval('newClientState.step') === "email");
+  check("After skipping city/state/zip, hands back to client flow at email step", win5.eval('newClientState.step') === "email");
   const minimalAddress = win5.eval('newClientState.data.address');
   check("Minimal address still includes street even with everything else skipped", minimalAddress.includes("500 Main St"));
 
-  // Test that "Skip" at the very first street question bypasses the entire address sub-flow
+  // Test that "Skip" at the very first address question bypasses the entire guided flow
   const dom6 = freshDom();
   const win6 = dom6.window;
   await wait(300);
   win6.eval('startNewClient()');
   win6.eval(`document.getElementById("userInput").value = "Test Person"; sendMsg();`);
   win6.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`);
-  check("Skipping at addr_street jumps straight to email (bypasses whole address sub-flow)", win6.eval('newClientState.step') === "email");
+  check("Skipping at awaiting_address jumps straight to email (never launches guidedAddrState)", win6.eval('newClientState.step') === "email");
+  check("guidedAddrState never launched when address is skipped upfront", win6.eval('guidedAddrState') === null);
   check("Address is blank when skipped at the very first address question", win6.eval('newClientState.data.address') === "");
 
   // Test that resetChat clears any in-progress newClientState
@@ -483,6 +491,7 @@ async function testClientHandoffMessage() {
 
   win.eval('startNewClient()');
   win.eval(`document.getElementById("userInput").value = "Andrew Whallon"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "Yes"; sendMsg();`); // wants to add address now
   win.eval(`document.getElementById("userInput").value = "1995 Canal Avenue"; sendMsg();`); // street
   win.eval(`document.getElementById("userInput").value = "No"; sendMsg();`); // no unit
   win.eval(`document.getElementById("userInput").value = "Long Beach"; sendMsg();`); // city
@@ -532,8 +541,9 @@ async function testGenericJobAddressFlow() {
 
   // Simulate the AI asking for job address — should trigger the guided flow, not accept free text directly
   win.eval(`smartChips("Great! Andrew Whallon it is. What's the job address?")`);
-  check("Job address question triggers guided flow in generic mode", win.eval('newJobAddrState !== null'));
-  check("Guided flow starts at street step", win.eval('newJobAddrState.step') === "street");
+  check("Job address question triggers unified guided flow in generic mode", win.eval('guidedAddrState !== null'));
+  check("Guided flow purpose is job", win.eval('guidedAddrState.purpose') === "job");
+  check("Guided flow starts at street step", win.eval('guidedAddrState.step') === "street");
 
   const introHtml = win.document.getElementById("chatBox").innerHTML;
   check("Intro message lists all 5 fields it will ask about",
@@ -541,22 +551,22 @@ async function testGenericJobAddressFlow() {
 
   // Walk through the full flow with a unit number, matching Adrian's real address structure
   win.eval(`document.getElementById("userInput").value = "1993 Canal Avenue"; sendMsg();`);
-  check("Street step advances to unit_yn", win.eval('newJobAddrState.step') === "unit_yn");
-  check("Street stored correctly", win.eval('newJobAddrState.data.street') === "1993 Canal Avenue");
+  check("Street step advances to unit_yn", win.eval('guidedAddrState.step') === "unit_yn");
+  check("Street stored correctly", win.eval('guidedAddrState.data.street') === "1993 Canal Avenue");
 
   win.eval(`document.getElementById("userInput").value = "No"; sendMsg();`);
-  check("Saying No to unit skips straight to city", win.eval('newJobAddrState.step') === "city");
-  check("Unit stored as blank", win.eval('newJobAddrState.data.unit') === "");
+  check("Saying No to unit skips straight to city", win.eval('guidedAddrState.step') === "city");
+  check("Unit stored as blank", win.eval('guidedAddrState.data.unit') === "");
 
   win.eval(`document.getElementById("userInput").value = "Long Beach"; sendMsg();`);
-  check("City step advances to state", win.eval('newJobAddrState.step') === "state");
+  check("City step advances to state", win.eval('guidedAddrState.step') === "state");
 
   win.eval(`document.getElementById("userInput").value = "CA"; sendMsg();`);
-  check("State step advances to zip", win.eval('newJobAddrState.step') === "zip");
+  check("State step advances to zip", win.eval('guidedAddrState.step') === "zip");
 
   win.eval(`document.getElementById("userInput").value = "90810"; sendMsg();`);
   await wait(100);
-  check("After zip, newJobAddrState is cleared (flow complete)", win.eval('newJobAddrState') === null);
+  check("After zip, guidedAddrState is cleared (flow complete)", win.eval('guidedAddrState') === null);
   check("convStage advances to tasks after job address complete", win.eval('convStage') === "tasks");
 
   const handoffMsg = win.eval('messages[messages.length-1].content');
@@ -574,10 +584,10 @@ async function testGenericJobAddressFlow() {
   win2.eval(`smartChips("What's the job address?")`);
   win2.eval(`document.getElementById("userInput").value = "500 Main St"; sendMsg();`);
   win2.eval(`document.getElementById("userInput").value = "Yes"; sendMsg();`);
-  check("Saying Yes to unit moves to unit_number step", win2.eval('newJobAddrState.step') === "unit_number");
+  check("Saying Yes to unit moves to unit_number step", win2.eval('guidedAddrState.step') === "unit_number");
   win2.eval(`document.getElementById("userInput").value = "Apt 4B"; sendMsg();`);
-  check("Unit number step advances to city", win2.eval('newJobAddrState.step') === "city");
-  check("Unit stored correctly", win2.eval('newJobAddrState.data.unit') === "Apt 4B");
+  check("Unit number step advances to city", win2.eval('guidedAddrState.step') === "city");
+  check("Unit stored correctly", win2.eval('guidedAddrState.data.unit') === "Apt 4B");
   win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // city
   win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // state
   win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // zip
@@ -591,19 +601,81 @@ async function testGenericJobAddressFlow() {
   await wait(300);
   win3.eval(`currentOrderedBy = "Andrew Whallon";`); // BPLW mode default stays
   win3.eval(`smartChips("Which address was the job at?")`);
-  check("BPLW mode does NOT trigger the new guided job-address flow", win3.eval('newJobAddrState') === null);
+  check("BPLW mode does NOT trigger the unified guided job-address flow", win3.eval('guidedAddrState') === null);
   const bplwChipArea = win3.document.getElementById("chipArea").innerHTML;
   check("BPLW mode still shows the original address chips", bplwChipArea.includes("chip"));
 
-  // Confirm resetChat clears any in-progress newJobAddrState
+  // Confirm resetChat clears any in-progress guidedAddrState
   const dom4 = freshDom();
   const win4 = dom4.window;
   await wait(300);
   win4.eval(`contractorInfo.mode = "generic";`);
-  win4.eval('startNewJobAddress()');
-  check("newJobAddrState set before reset", win4.eval('newJobAddrState') !== null);
+  win4.eval(`startGuidedAddress("job")`);
+  check("guidedAddrState set before reset", win4.eval('guidedAddrState') !== null);
   win4.eval('resetChat()');
-  check("resetChat() clears in-progress newJobAddrState", win4.eval('newJobAddrState') === null);
+  check("resetChat() clears in-progress guidedAddrState", win4.eval('guidedAddrState') === null);
+}
+
+async function testUnifiedAddressBplwAndContractorPurposes() {
+  console.log("\n=== TEST SUITE 11: Unified Guided Address Flow — BPLW and Contractor Settings purposes ===");
+
+  // BPLW purpose: adding a new address for a partner via the chat (the original "+ Add new address" chip)
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+  win.eval(`startGuidedAddress("bplw", {clientName: "Richard Baisz"})`);
+  check("BPLW purpose stored on guidedAddrState", win.eval('guidedAddrState.purpose') === "bplw");
+  check("BPLW meta carries the client name", win.eval('guidedAddrState.meta.clientName') === "Richard Baisz");
+
+  win.eval(`document.getElementById("userInput").value = "777 Anaheim St"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "No"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "Long Beach"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "CA"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "90804"; sendMsg();`);
+  check("guidedAddrState cleared after BPLW address completes", win.eval('guidedAddrState') === null);
+
+  const richardAddrs = JSON.parse(win.eval(`JSON.stringify(getClientAddresses("Richard Baisz"))`));
+  const savedAddr = richardAddrs.find(a => a.full && a.full.includes("777 Anaheim St"));
+  check("New BPLW address actually saved to Richard Baisz's address book", !!savedAddr);
+  check("Saved BPLW address includes city/state/zip", savedAddr && savedAddr.full.includes("Long Beach") && savedAddr.full.includes("CA") && savedAddr.full.includes("90804"));
+
+  // Confirm this doesn't affect Andrew Whallon's separate preloaded address list
+  const andrewAddrs = JSON.parse(win.eval(`JSON.stringify(getClientAddresses("Andrew Whallon"))`));
+  check("Andrew Whallon's preloaded addresses remain untouched", andrewAddrs.length > 0);
+
+  // Contractor Settings purpose
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval(`startGuidedAddress("contractor")`);
+  check("Contractor purpose stored on guidedAddrState", win2.eval('guidedAddrState.purpose') === "contractor");
+
+  win2.eval(`document.getElementById("userInput").value = "42 Workshop Way"; sendMsg();`);
+  win2.eval(`document.getElementById("userInput").value = "No"; sendMsg();`);
+  win2.eval(`document.getElementById("userInput").value = "Riverside"; sendMsg();`);
+  win2.eval(`document.getElementById("userInput").value = "CA"; sendMsg();`);
+  win2.eval(`document.getElementById("userInput").value = "92501"; sendMsg();`);
+  check("guidedAddrState cleared after contractor address completes", win2.eval('guidedAddrState') === null);
+
+  const settingsAddrValue = win2.document.getElementById("setAddress").value;
+  check("Contractor address field populated with the built address", settingsAddrValue.includes("42 Workshop Way") && settingsAddrValue.includes("Riverside"));
+  check("Settings panel is shown after contractor address completes", win2.document.getElementById("settingsPanel").style.display === "block");
+
+  // Confirm the BPLW legacy edit_field path (Address Manager single-field correction) still works independently
+  const dom3 = freshDom();
+  const win3 = dom3.window;
+  await wait(300);
+  win3.eval(`
+    editingAddressKey = "addr_TestClient";
+    editingAddressIdx = 0;
+    editingAddressData = {streetName:"Old St", streetNum:"100", unit:"", city:"Old City", zip:"90000"};
+    localStorage.setItem("addr_TestClient", JSON.stringify([{id:"x", display:"100 Old St", full:"100 Old St, Old City 90000"}]));
+    newAddrState = {step:"edit_field", data:{...editingAddressData, field:"city"}};
+  `);
+  win3.eval(`document.getElementById("userInput").value = "New City"; sendMsg();`);
+  const updatedList = JSON.parse(win3.eval(`localStorage.getItem("addr_TestClient")`));
+  check("Legacy edit_field path still updates a saved BPLW address correctly", updatedList[0].full.includes("New City"));
+  check("newAddrState cleared after edit_field completes", win3.eval('newAddrState') === null);
 }
 
 (async () => {
@@ -618,6 +690,7 @@ async function testGenericJobAddressFlow() {
     await testPhoneFormatting();
     await testClientHandoffMessage();
     await testGenericJobAddressFlow();
+    await testUnifiedAddressBplwAndContractorPurposes();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
