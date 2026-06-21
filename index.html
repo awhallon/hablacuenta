@@ -197,8 +197,9 @@ function getClientAddressKey(clientName){
 }
 
 function getClientAddresses(clientName){
-  if(clientName==="Andrew Whallon"){
-    // Merge preloaded + any saved additions
+  const BPLW_PARTNER_NAMES=["Andrew Whallon","Richard Baisz","Gerry Baisz","Pravin Patel"];
+  if(BPLW_PARTNER_NAMES.includes(clientName)){
+    // All BPLW partners share the same Long Beach property list, plus any saved additions
     try{
       const saved=JSON.parse(localStorage.getItem(getClientAddressKey(clientName))||"[]");
       return [...ANDREW_ADDRESSES, ...saved];
@@ -399,7 +400,7 @@ FLOW — ONE question at a time:
 2. Which partner ordered? You may list the partner names for clarity.
 3. Ask for the job address. Do NOT list addresses or streets in your response — just ask "Which address was the job at?" The app will show address buttons.
 ${invoiceType!=="materials"?`5. What work did you perform? Ask ONE TASK AT A TIME: "What was the first task and price?" then "Any other tasks? If yes, what and how much?" Repeat until done.`:""}
-${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase materials? Ask ONE RECEIPT AT A TIME: "Where did you buy it and how much?" then "Any other receipts?" Repeat until done.`:""}
+${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase materials? Ask ONE RECEIPT AT A TIME: "Where did you buy it, what did you buy, what date, and how much?" Make sure you collect all four details (vendor, item/description, purchase date, amount) before moving to the next receipt — each goes into its own field (vendor, desc, date, amount), do not combine them into one string. Then ask "Any other receipts?" Repeat until done.`:""}
 ${invoiceType==="both"?"7":"6"}. Date work was completed?
 ${invoiceType==="both"?"8":"7"}. Confirm all details. Show the full built address. If anything needs correction, say "Please tell me what to fix."
 
@@ -410,7 +411,7 @@ CORRECTION HANDLING: If user says something needs fixing, list the collected fie
 - Make only the requested change, keep everything else the same.
 
 When you have EVERYTHING respond ONLY with valid JSON:
-{"done":true,"client_type":"bplw","bill_to_name":"BPLW Management","bill_to_address":"PO Box 9395, Long Beach CA 90810","bill_to_email":"EMAIL","bill_to_phone":"PHONE","ordered_by":"NAME","job_address":"FULL ADDRESS","work_items":[{"desc":"x","amount":0}],"materials_items":[{"desc":"x","amount":0}],"date":"DATE","has_materials":${invoiceType!=="labor"},"has_labor":${invoiceType!=="materials"},"new_client":null}`;
+{"done":true,"client_type":"bplw","bill_to_name":"BPLW Management","bill_to_address":"PO Box 9395, Long Beach CA 90810","bill_to_email":"EMAIL","bill_to_phone":"PHONE","ordered_by":"NAME","job_address":"FULL ADDRESS","work_items":[{"desc":"x","amount":0}],"materials_items":[{"vendor":"x","desc":"x","date":"x","amount":0}],"date":"DATE","has_materials":${invoiceType!=="labor"},"has_labor":${invoiceType!=="materials"},"new_client":null}`;
 }
 
 function setLang(l){
@@ -959,7 +960,7 @@ function showInvoicePreview(d){
       <div><span class="inv-label">Job Address</span>&nbsp;${d.job_address}</div>
       <hr class="inv-sep">
       <div class="inv-label">Materials / Reimbursement</div>
-      ${(d.materials_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.desc}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
+      ${(d.materials_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.vendor?i.vendor+" — ":""}${i.desc}${i.date?" ("+i.date+")":""}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
       <hr class="inv-sep">
       <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;"><span>Total Materials</span><span>${fmt(matTotal)}</span></div>
       <button class="correct-btn" onclick="showCorrectionMenu('materials')">✏️ Something needs correcting</button>
@@ -995,7 +996,7 @@ function showCorrectionMenu(type){
         "job_address":"Which street was the job on?",
         "date":"What date was the work completed?",
         "work_items":"Let's redo the tasks. What was the first task and its price?",
-        "materials_items":"Let's redo the materials. Where did you buy the first receipt and how much?"
+        "materials_items":"Let's redo the materials. Where did you buy the first receipt, what did you buy, what date, and how much?"
       };
       addAIMsg(prompts[f.key]||`Please provide the correct ${f.label}.`);
       if(f.key==="job_address") showStreetChips();
@@ -1061,7 +1062,8 @@ async function generatePDF(type){
   let total=0;
   items.forEach(item=>{
     doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(20);
-    const lines=doc.splitTextToSize(item.desc,cw-90);doc.text(lines,M,y);
+    const lineText=(!isLabor&&item.vendor)?`${item.vendor} — ${item.desc}${item.date?" ("+item.date+")":""}`:item.desc;
+    const lines=doc.splitTextToSize(lineText,cw-90);doc.text(lines,M,y);
     const amt=parseFloat(item.amount);total+=amt;
     doc.text(fmt(amt),W-M,y,{align:"right"});y+=lines.length*14+6;
   });
