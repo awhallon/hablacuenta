@@ -1159,6 +1159,59 @@ async function testAndrewWhallonNameCollisionFix() {
     genericAddrsAfterSave.length === 1 && genericAddrsAfterSave[0].full.includes("Riverside"));
 }
 
+async function testJobPhotoPromptFlow() {
+  console.log("\n=== TEST SUITE 21: In-Conversation Job Photo Prompt (regression for Adrian's reported asymmetry bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // The trigger phrase should show the job photo chips, mirroring the receipt photo trigger
+  win.eval(`smartChips("Got it. Want to add a photo of the job?")`);
+  const chipArea = win.document.getElementById("chipArea").innerHTML;
+  check("Job photo prompt phrase triggers showJobPhotoChips", chipArea.includes("Take photo") || chipArea.includes("Tomar foto"));
+  check("Job photo chips include a Skip option", chipArea.includes("Skip") || chipArea.includes("Omitir"));
+
+  // Confirm showJobPhotoChips sets up the correct click handler (triggers job-type photo capture)
+  win.eval(`showJobPhotoChips()`);
+  win.eval(`document.querySelector('#chipArea .chip.new').click()`);
+  check("Clicking 'Take photo' sets pendingPhotoChipMsg, same mechanism as receipts", win.eval('pendingPhotoChipMsg') === "📷 Photo added");
+
+  // Simulate a job photo actually being captured via handlePhoto, and confirm it resumes
+  // the conversation afterward — this was the actual missing piece (receipt photos already
+  // did this, job photos silently did not).
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval(`
+    pendingPhotoChipMsg = "📷 Photo added";
+    jobPhotos = [];
+    messages = [];
+  `);
+  // Simulate what handlePhoto does for a job photo after EXIF correction, without needing a real File object
+  win2.eval(`
+    (function(){
+      const dataUrl = "data:image/jpeg;base64,FAKE";
+      if(jobPhotos.length>=8){return;}
+      jobPhotos.push(dataUrl);renderJobPhotos();
+      if(pendingPhotoChipMsg){
+        const msg=pendingPhotoChipMsg;pendingPhotoChipMsg=null;
+        document.getElementById("userInput").value=msg;sendMsg();
+      }
+    })()
+  `);
+  await wait(100);
+  check("Job photo was actually added to jobPhotos", win2.eval('jobPhotos.length') === 1);
+  check("After capturing a job photo via the chip flow, the conversation resumes (pendingPhotoChipMsg cleared)",
+    win2.eval('pendingPhotoChipMsg') === null);
+  const sentMsg = win2.eval('messages.length > 0 ? messages[messages.length-1].content : null');
+  check("A follow-up message was sent to the AI after the job photo was captured", sentMsg === "📷 Photo added");
+
+  // Confirm the system prompt actually instructs the AI to ask about job photos after labor tasks
+  const sysPrompt = win.eval('getSystemPrompt()');
+  check("System prompt instructs the AI to ask about a job photo after collecting labor tasks",
+    sysPrompt.includes("Want to add a photo of the job"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -1181,6 +1234,7 @@ async function testAndrewWhallonNameCollisionFix() {
     await testPhotoOrientationCorrection();
     await testGenericModeJobAddressPersistence();
     await testAndrewWhallonNameCollisionFix();
+    await testJobPhotoPromptFlow();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
