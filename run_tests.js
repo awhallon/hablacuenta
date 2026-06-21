@@ -283,6 +283,85 @@ async function testBackButtonVisibility() {
   check("Generic mode: goBack() reverts to invoice_type stage", stageAfterBack2 === "invoice_type");
 }
 
+async function testNewClientFlow() {
+  console.log("\n=== TEST SUITE 7: Guided New-Client Entry Flow ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // Start the flow
+  win.eval('startNewClient()');
+  check("startNewClient sets newClientState to name step", win.eval('newClientState.step') === "name");
+  check("AI prompts for client name", win.document.getElementById("chatBox").innerHTML.includes("client's name"));
+
+  // Provide a name
+  win.eval(`document.getElementById("userInput").value = "Maria Lopez"; sendMsg();`);
+  check("After name, step advances to address", win.eval('newClientState.step') === "address");
+  check("Name was stored correctly", win.eval('newClientState.data.name') === "Maria Lopez");
+
+  // Skip address
+  win.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`);
+  check("After skipping address, step advances to email", win.eval('newClientState.step') === "email");
+  check("Skipped address stored as blank, not 'Skip'", win.eval('newClientState.data.address') === "");
+
+  // Provide email
+  win.eval(`document.getElementById("userInput").value = "maria@example.com"; sendMsg();`);
+  check("After email, step advances to phone", win.eval('newClientState.step') === "phone");
+
+  // Skip phone
+  win.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`);
+  check("After skipping phone, step advances to summary", win.eval('newClientState.step') === "summary");
+
+  const summaryHtml = win.document.getElementById("chatBox").innerHTML;
+  check("Summary shows the name", summaryHtml.includes("Maria Lopez"));
+  check("Summary shows blank address note", summaryHtml.includes("blank"));
+
+  // Confirm looks good -> should save and clear state
+  win.eval(`document.getElementById("userInput").value = "Looks good"; sendMsg();`);
+  check("newClientState cleared after saving", win.eval('newClientState') === null);
+  const savedClients = JSON.parse(win.eval('JSON.stringify(savedClients)'));
+  const saved = savedClients.find(c => c.name === "Maria Lopez");
+  check("Client actually saved to savedClients with correct name", !!saved);
+  check("Saved client has blank address (not the word Skip)", saved && saved.address === "");
+  check("Saved client has correct email", saved && saved.email === "maria@example.com");
+
+  // Test the edit-before-saving path
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval('startNewClient()');
+  win2.eval(`document.getElementById("userInput").value = "Wrong Name"; sendMsg();`);
+  win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // address
+  win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // email
+  win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // phone, lands on summary
+  check("Reached summary step before testing edit", win2.eval('newClientState.step') === "summary");
+
+  win2.eval(`document.getElementById("userInput").value = "Fix something"; sendMsg();`);
+  check("Choosing fix-something moves to edit_field step", win2.eval('newClientState.step') === "edit_field");
+
+  win2.eval(`document.getElementById("userInput").value = "Name"; sendMsg();`);
+  check("Picking Name field moves to editing_name step", win2.eval('newClientState.step') === "editing_name");
+
+  win2.eval(`document.getElementById("userInput").value = "Corrected Name"; sendMsg();`);
+  check("After correction, returns to summary step", win2.eval('newClientState.step') === "summary");
+  const correctedSummary = win2.document.getElementById("chatBox").innerHTML;
+  check("Summary now shows corrected name", correctedSummary.includes("Corrected Name"));
+
+  win2.eval(`document.getElementById("userInput").value = "Looks good"; sendMsg();`);
+  const savedClients2 = JSON.parse(win2.eval('JSON.stringify(savedClients)'));
+  const saved2 = savedClients2.find(c => c.name === "Corrected Name");
+  check("Corrected name was the one actually saved (not the original typo)", !!saved2);
+
+  // Test that resetChat clears any in-progress newClientState
+  const dom3 = freshDom();
+  const win3 = dom3.window;
+  await wait(300);
+  win3.eval('startNewClient()');
+  check("newClientState set before reset", win3.eval('newClientState') !== null);
+  win3.eval('resetChat()');
+  check("resetChat() clears in-progress newClientState", win3.eval('newClientState') === null);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -291,6 +370,7 @@ async function testBackButtonVisibility() {
     await testPanelNavigation();
     await testAlfonsoDeviceUnaffected();
     await testBackButtonVisibility();
+    await testNewClientFlow();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
