@@ -890,6 +890,8 @@ function smartChips(reply){
   }
   // Generic mode: client selection (no BPLW/partner concept)
   if(lower.includes("who is this invoice for")||lower.includes("para quién es esta factura")){
+    convStage="client_type";
+    showBackBtn(true);
     showSavedClientChips(); return;
   }
   // Partner
