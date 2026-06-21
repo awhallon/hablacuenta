@@ -197,9 +197,8 @@ function getClientAddressKey(clientName){
 }
 
 function getClientAddresses(clientName){
-  const BPLW_PARTNER_NAMES=["Andrew Whallon","Richard Baisz","Gerry Baisz","Pravin Patel"];
-  if(BPLW_PARTNER_NAMES.includes(clientName)){
-    // All BPLW partners share the same Long Beach property list, plus any saved additions
+  if(clientName==="Andrew Whallon"){
+    // Merge preloaded + any saved additions
     try{
       const saved=JSON.parse(localStorage.getItem(getClientAddressKey(clientName))||"[]");
       return [...ANDREW_ADDRESSES, ...saved];
