@@ -1100,10 +1100,18 @@ function smartChips(reply){
   if(lower.includes("which partner")||lower.includes("andrew whallon")&&lower.includes("richard")){
     setChips("partner"); return;
   }
-  // Job address / location question
-  if(lower.includes("which address")||lower.includes("which street")||lower.includes("what street")||lower.includes("street is the job")||lower.includes("street was the work")||lower.includes("job location")||lower.includes("job address")||lower.includes("where was the job")||lower.includes("location of the job")||lower.includes("address was the job")||lower.includes("address of the job")){
-    if(contractorInfo.mode==="generic"){ startGuidedAddress("job"); return; }
-    setChips("street"); return;
+  // Job address / location question — require the question mark to appear shortly after
+  // the trigger phrase, so this doesn't re-fire on confirmation statements like "The job
+  // address is 1995 Canal Ave. What was the first task?" (which has a '?' but for a different question).
+  const jobAddrPhrases=["which address","which street","what street","street is the job","street was the work","job location","job address","where was the job","location of the job","address was the job","address of the job"];
+  const jobAddrMatch=jobAddrPhrases.find(p=>lower.includes(p));
+  if(jobAddrMatch){
+    const idx=lower.indexOf(jobAddrMatch);
+    const nearbyText=lower.slice(idx,idx+60);
+    if(nearbyText.includes("?")){
+      if(contractorInfo.mode==="generic"){ startGuidedAddress("job"); return; }
+      setChips("street"); return;
+    }
   }
   // Receipt photo prompt
   if(lower.includes("add a photo of this receipt")||lower.includes("agregar una foto de este recibo")){
