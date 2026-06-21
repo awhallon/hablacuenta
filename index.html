@@ -511,10 +511,16 @@ function setLang(l){
   resetChat();
 }
 
+const ALL_PANEL_IDS=["mainPanel","managerPanel","incompletePanel","historyPanel","settingsPanel","addressManagerPanel"];
+function hideAllPanels(){
+  ALL_PANEL_IDS.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.style.display="none";
+  });
+}
 function showManager(){
+  hideAllPanels();
   document.getElementById("managerPanel").style.display="block";
-  document.getElementById("mainPanel").style.display="none";
-  document.getElementById("incompletePanel").style.display="none";
   renderClientList();
 }
 function hideManager(){
@@ -522,9 +528,8 @@ function hideManager(){
   document.getElementById("mainPanel").style.display="block";
 }
 function showIncomplete(){
+  hideAllPanels();
   document.getElementById("incompletePanel").style.display="block";
-  document.getElementById("mainPanel").style.display="none";
-  document.getElementById("managerPanel").style.display="none";
   renderIncompleteList();
 }
 function hideIncomplete(){
@@ -532,8 +537,8 @@ function hideIncomplete(){
   document.getElementById("mainPanel").style.display="block";
 }
 function showHistory(){
+  hideAllPanels();
   document.getElementById("historyPanel").style.display="block";
-  document.getElementById("mainPanel").style.display="none";
   renderHistoryList();
 }
 function hideHistory(){
@@ -541,8 +546,8 @@ function hideHistory(){
   document.getElementById("mainPanel").style.display="block";
 }
 function showSettings(){
+  hideAllPanels();
   document.getElementById("settingsPanel").style.display="block";
-  document.getElementById("mainPanel").style.display="none";
   document.getElementById("setName").value=contractorInfo.name;
   document.getElementById("setAddress").value=contractorInfo.address;
   document.getElementById("setPhone").value=contractorInfo.phone;
@@ -1339,10 +1344,8 @@ function showFormattedSummary(rawReply){
 }
 
 function showAddressManager(){
+  hideAllPanels();
   document.getElementById("addressManagerPanel").style.display="block";
-  document.getElementById("mainPanel").style.display="none";
-  document.getElementById("managerPanel").style.display="none";
-  document.getElementById("incompletePanel").style.display="none";
   renderAddressManager();
 }
 function hideAddressManager(){
