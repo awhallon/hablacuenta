@@ -1042,7 +1042,7 @@ async function callClaude(userText,isRetry){
           return;
         }
         // Check if AI is asking for confirmation — show formatted summary instead
-        if(reply.toLowerCase().includes("confirm") || reply.toLowerCase().includes("everything correct") || reply.toLowerCase().includes("need to be fixed") || reply.toLowerCase().includes("confirmar")){
+        if(reply.toLowerCase().includes("confirm") || reply.toLowerCase().includes("everything correct") || reply.toLowerCase().includes("look correct") || reply.toLowerCase().includes("need to be fixed") || reply.toLowerCase().includes("confirmar") || reply.toLowerCase().includes("todo correcto") || reply.toLowerCase().includes("se ve correcto") || reply.toLowerCase().includes("corregir algo")){
           // Try to extract data from conversation and show formatted summary
           showFormattedSummary(reply);
           setTimeout(()=>showConfirmChips(), 100);
@@ -1646,7 +1646,7 @@ function showFormattedSummary(rawReply){
     .replace(/Todo correcto.*$/i, '\n\n¿Todo correcto?');
   // Reformat any raw phone numbers the AI wrote out as-is (e.g. after a "Phone:" label),
   // since the AI's free-text summary bypasses the structured invoiceData formatting entirely.
-  formatted = formatted.replace(/(Phone|Teléfono):\s*([\d\s().+-]{7,})/gi, (match, label, num) => `${label}: ${formatPhone(num.trim())}`);
+  formatted = formatted.replace(/(Phone|Teléfono):[ \t]*([\d ().+-]{7,})/gi, (match, label, num) => `${label}: ${formatPhone(num.trim())}`);
   d.textContent = formatted;
   box.appendChild(d);
   box.scrollTop = box.scrollHeight;
