@@ -88,7 +88,7 @@ input[type=file]{display:none;}
 <div class="app">
   <div class="header">
     <div>
-      <div class="header-title">📄 Alfonso Sanchez Property Services</div>
+      <div class="header-title" id="headerTitleText">📄 Alfonso Sanchez Property Services</div>
       <div class="header-sub">Invoice Assistant</div>
     </div>
     <div class="header-right">
@@ -101,6 +101,7 @@ input[type=file]{display:none;}
         <span class="nav-link" onclick="showHistory()">History</span>
         <span class="nav-link" onclick="showManager()">Clients</span>
         <span class="nav-link" onclick="showAddressManager()">Addresses</span>
+        <span class="nav-link" onclick="showSettings()">Settings</span>
       </div>
     </div>
   </div>
@@ -124,6 +125,22 @@ input[type=file]{display:none;}
       <div id="historyList"></div>
     </div>
     <button class="back-btn" onclick="hideHistory()">← Back</button>
+  </div>
+
+  <div id="settingsPanel" style="display:none;">
+    <div class="mgr-panel">
+      <h3>Your Business Info</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:12px;">This appears as the "From" on every invoice you create on this device.</p>
+      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Business / Your Name</label>
+      <input id="setName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
+      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Address</label>
+      <input id="setAddress" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
+      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Phone</label>
+      <input id="setPhone" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:16px;">
+      <button class="pdf-btn" onclick="saveSettingsForm()">Save</button>
+      <div id="settingsSavedMsg" style="display:none;color:#16A34A;font-size:13px;margin-top:10px;text-align:center;">✓ Saved</div>
+    </div>
+    <button class="back-btn" onclick="hideSettings()">← Back</button>
   </div>
 
   <div id="addressManagerPanel" style="display:none;">
@@ -369,6 +386,7 @@ let matNum=parseInt(localStorage.getItem("matNum")||"20001");
 let savedClients=loadClients();
 let incompleteInvoices=loadIncomplete();
 let invoiceHistory=loadHistory();
+let contractorInfo=loadContractorInfo();
 let jobPhotos=[];
 let receipts=[];
 let pendingPhotoChipMsg=null; // tracks in-conversation receipt photo capture
@@ -382,6 +400,15 @@ function saveLaborNum(){try{localStorage.setItem("laborNum",String(laborNum));}c
 function saveMatNum(){try{localStorage.setItem("matNum",String(matNum));}catch(e){}}
 function loadHistory(){try{return JSON.parse(localStorage.getItem("alfonso_history")||"[]");}catch(e){return[];}}
 function saveHistory(){try{localStorage.setItem("alfonso_history",JSON.stringify(invoiceHistory));}catch(e){}}
+const DEFAULT_CONTRACTOR_INFO={name:"Alfonso Sanchez Property Services",address:"310 Main Ave Apt 1, Long Beach CA 90802",phone:"562-533-7907"};
+function loadContractorInfo(){
+  try{
+    const saved=JSON.parse(localStorage.getItem("contractor_info"));
+    if(saved&&saved.name)return saved;
+  }catch(e){}
+  return {...DEFAULT_CONTRACTOR_INFO};
+}
+function saveContractorInfo(){try{localStorage.setItem("contractor_info",JSON.stringify(contractorInfo));}catch(e){}}
 function recordInvoiceHistory(type,invNum){
   if(!invoiceData)return;
   // Avoid duplicate entries if the same invoice is shared/downloaded multiple times
@@ -416,11 +443,11 @@ function getSystemPrompt(){
     ? "This is a MATERIALS ONLY invoice. Do not ask about labor tasks."
     : "This invoice covers BOTH labor and materials.";
 
-  return `You are a billing assistant for Alfonso Sanchez Property Services. English only. Brief. ONE question at a time.
+  return `You are a billing assistant for ${contractorInfo.name}. English only. Brief. ONE question at a time.
 
 ${invoiceTypeDesc}
 
-CONTRACTOR: Alfonso Sanchez Property Services, 310 Main Ave Apt 1, Long Beach CA 90802, Phone: 562-533-7907
+CONTRACTOR: ${contractorInfo.name}, ${contractorInfo.address}, Phone: ${contractorInfo.phone}
 
 TYPE 1 — BPLW Management, PO Box 9395, Long Beach CA 90810
 - Andrew Whallon | andywhallon@yahoo.com | 562-882-8632
@@ -495,6 +522,29 @@ function showHistory(){
 function hideHistory(){
   document.getElementById("historyPanel").style.display="none";
   document.getElementById("mainPanel").style.display="block";
+}
+function showSettings(){
+  document.getElementById("settingsPanel").style.display="block";
+  document.getElementById("mainPanel").style.display="none";
+  document.getElementById("setName").value=contractorInfo.name;
+  document.getElementById("setAddress").value=contractorInfo.address;
+  document.getElementById("setPhone").value=contractorInfo.phone;
+  document.getElementById("settingsSavedMsg").style.display="none";
+}
+function hideSettings(){
+  document.getElementById("settingsPanel").style.display="none";
+  document.getElementById("mainPanel").style.display="block";
+}
+function saveSettingsForm(){
+  const name=document.getElementById("setName").value.trim();
+  const address=document.getElementById("setAddress").value.trim();
+  const phone=document.getElementById("setPhone").value.trim();
+  if(!name){alert("Business name is required.");return;}
+  contractorInfo={name,address,phone};
+  saveContractorInfo();
+  document.getElementById("settingsSavedMsg").style.display="block";
+  document.getElementById("headerTitleText").textContent="📄 "+name;
+  document.title=name;
 }
 function renderHistoryList(){
   const el=document.getElementById("historyList");
@@ -1040,7 +1090,7 @@ function showInvoicePreview(d,viewNum){
       <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Labor <span class="tag labor">Labor</span></h3>
       <div style="font-size:12px;color:#888;">#${viewNum||laborNum} &nbsp;·&nbsp; ${d.date}</div>
       <hr class="inv-sep">
-      <div class="inv-label">From</div><div>Alfonso Sanchez Property Services<br>310 Main Ave Apt 1, Long Beach CA 90802<br>562-533-7907</div>
+      <div class="inv-label">From</div><div>${contractorInfo.name}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
       <hr class="inv-sep">
       <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
       <hr class="inv-sep">
@@ -1062,7 +1112,7 @@ function showInvoicePreview(d,viewNum){
       <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Materials <span class="tag mat">Materials</span></h3>
       <div style="font-size:12px;color:#888;">#${viewNum||matNum} &nbsp;·&nbsp; ${d.date}</div>
       <hr class="inv-sep">
-      <div class="inv-label">From</div><div>Alfonso Sanchez Property Services<br>310 Main Ave Apt 1, Long Beach CA 90802<br>562-533-7907</div>
+      <div class="inv-label">From</div><div>${contractorInfo.name}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
       <hr class="inv-sep">
       <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
       <hr class="inv-sep">
@@ -1143,9 +1193,9 @@ async function buildPDF(type,forceNum){
   function hline(){doc.setDrawColor(220);doc.setLineWidth(0.5);doc.line(M,y,W-M,y);y+=14;}
   function secLabel(str){doc.setFontSize(8);doc.setFont("helvetica","normal");doc.setTextColor(150);doc.text(str.toUpperCase(),M,y);y+=5;hline();}
   doc.setFontSize(17);doc.setFont("helvetica","bold");doc.setTextColor(20);
-  doc.text("Alfonso Sanchez Property Services",M,y);y+=20;
+  doc.text(contractorInfo.name,M,y);y+=20;
   doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(100);
-  doc.text("310 Main Avenue Apt 1, Long Beach CA 90802   |   562-533-7907",M,y);y+=24;
+  doc.text(`${contractorInfo.address}   |   ${contractorInfo.phone}`,M,y);y+=24;
   const isLabor=type==="labor";
   doc.setFillColor(isLabor?220:254,isLabor?252:252,isLabor?231:200);
   doc.roundedRect(M,y,cw,40,5,5,"F");
@@ -1217,7 +1267,7 @@ async function shareInvoicePDF(type,forceNum){
   const {doc,fname,isLabor,invNum}=built;
   const blob=doc.output("blob");
   const file=new File([blob],fname,{type:"application/pdf"});
-  const shareText=`${isLabor?"Labor":"Materials"} invoice from Alfonso Sanchez Property Services.`;
+  const shareText=`${isLabor?"Labor":"Materials"} invoice from ${contractorInfo.name}.`;
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{
       await navigator.share({files:[file],title:fname,text:shareText});
@@ -1402,7 +1452,11 @@ function startAddressManagerAdd(){
   addAIMsg(`Adding new address for ${clientName}. What is the street name?`);
 }
 
-window.onload=()=>resetChat();
+function applyContractorInfoToHeader(){
+  document.getElementById("headerTitleText").textContent="📄 "+contractorInfo.name;
+  document.title=contractorInfo.name;
+}
+window.onload=()=>{applyContractorInfoToHeader();resetChat();};
 </script>
 </body>
 </html>
