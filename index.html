@@ -399,7 +399,12 @@ FLOW — ONE question at a time:
 2. Which partner ordered? You may list the partner names for clarity.
 3. Ask for the job address. Do NOT list addresses or streets in your response — just ask "Which address was the job at?" The app will show address buttons.
 ${invoiceType!=="materials"?`5. What work did you perform? Ask ONE TASK AT A TIME: "What was the first task and price?" then "Any other tasks? If yes, what and how much?" Repeat until done.`:""}
-${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase materials? Ask ONE RECEIPT AT A TIME: "Where did you buy it, what did you buy, what date, and how much?" Make sure you collect all four details (vendor, item/description, purchase date, amount) before moving to the next receipt — each goes into its own field (vendor, desc, date, amount), do not combine them into one string. Then ask "Any other receipts?" Repeat until done.`:""}
+${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase materials? Walk through ONE RECEIPT AT A TIME, asking ONE QUESTION AT A TIME — do not combine multiple questions into one message:
+   a. "Where did you buy it?" (vendor)
+   b. "What did you buy?" (item/description)
+   c. "What date was it purchased?" (date)
+   d. "How much did it cost?" (amount)
+   After all four are collected for this receipt, ask "Any other receipts?" If yes, repeat steps a-d for the next receipt. Each detail goes into its own field (vendor, desc, date, amount) — never combine them into one string.`:""}
 ${invoiceType==="both"?"7":"6"}. Date work was completed?
 ${invoiceType==="both"?"8":"7"}. Confirm all details. Show the full built address. If anything needs correction, say "Please tell me what to fix."
 
@@ -995,7 +1000,7 @@ function showCorrectionMenu(type){
         "job_address":"Which street was the job on?",
         "date":"What date was the work completed?",
         "work_items":"Let's redo the tasks. What was the first task and its price?",
-        "materials_items":"Let's redo the materials. Where did you buy the first receipt, what did you buy, what date, and how much?"
+        "materials_items":"Let's redo the materials. Where did you buy the first receipt?"
       };
       addAIMsg(prompts[f.key]||`Please provide the correct ${f.label}.`);
       if(f.key==="job_address") showStreetChips();
