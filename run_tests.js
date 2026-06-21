@@ -771,6 +771,91 @@ async function testJobAddressConfirmationDoesNotRetrigger() {
     win3.document.getElementById("chipArea").innerHTML === "");
 }
 
+async function testAiStatedWrongYearGetsCorrected() {
+  console.log("\n=== TEST SUITE 14: AI-Stated Wrong Year Gets Corrected (regression for Adrian's reported bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // Reproduce the exact AI reply from Adrian's screenshot, where the AI stated 2025
+  // despite the real current year (per the device/sandbox clock) being 2026.
+  const aiReplyWithWrongYear = "Got it — and was that this year (2025), or a different year?";
+  const corrected = win.eval(`
+    (function(){
+      let reply = ${JSON.stringify(aiReplyWithWrongYear)};
+      const yearClarifyMatch = reply.match(/this year\\s*\\((\\d{4})\\)/i) || reply.match(/este año\\s*\\((\\d{4})\\)/i);
+      if (yearClarifyMatch) {
+        const statedYear = yearClarifyMatch[1];
+        const actualYear = String(new Date().getFullYear());
+        if (statedYear !== actualYear) {
+          reply = reply.replace(statedYear, actualYear);
+        }
+      }
+      return reply;
+    })()
+  `);
+  const realCurrentYear = win.eval('new Date().getFullYear()');
+  check("Wrong year in AI reply gets corrected to the real current year",
+    corrected.includes(String(realCurrentYear)) && !corrected.includes("2025"),
+    `corrected text: "${corrected}", expected year: ${realCurrentYear}`);
+  check("Corrected text otherwise preserves the original message",
+    corrected.includes("Got it") && corrected.includes("different year"));
+
+  // Confirm a reply with the CORRECT year already is left untouched (no double-correction artifacts)
+  const correctYearReply = `Got it — and was that this year (${realCurrentYear}), or a different year?`;
+  const unchanged = win.eval(`
+    (function(){
+      let reply = ${JSON.stringify(correctYearReply)};
+      const yearClarifyMatch = reply.match(/this year\\s*\\((\\d{4})\\)/i) || reply.match(/este año\\s*\\((\\d{4})\\)/i);
+      if (yearClarifyMatch) {
+        const statedYear = yearClarifyMatch[1];
+        const actualYear = String(new Date().getFullYear());
+        if (statedYear !== actualYear) {
+          reply = reply.replace(statedYear, actualYear);
+        }
+      }
+      return reply;
+    })()
+  `);
+  check("A reply with the already-correct year is left unchanged", unchanged === correctYearReply);
+
+  // Confirm the Spanish phrasing pattern is also caught
+  const spanishWrongYear = "Entendido — ¿fue este año (2025), o un año diferente?";
+  const correctedEs = win.eval(`
+    (function(){
+      let reply = ${JSON.stringify(spanishWrongYear)};
+      const yearClarifyMatch = reply.match(/this year\\s*\\((\\d{4})\\)/i) || reply.match(/este año\\s*\\((\\d{4})\\)/i);
+      if (yearClarifyMatch) {
+        const statedYear = yearClarifyMatch[1];
+        const actualYear = String(new Date().getFullYear());
+        if (statedYear !== actualYear) {
+          reply = reply.replace(statedYear, actualYear);
+        }
+      }
+      return reply;
+    })()
+  `);
+  check("Spanish-phrased wrong year also gets corrected", correctedEs.includes(String(realCurrentYear)) && !correctedEs.includes("2025"));
+
+  // Confirm a reply with no year-clarification pattern at all passes through untouched
+  const unrelatedReply = "What was the first task and price?";
+  const stillUnrelated = win.eval(`
+    (function(){
+      let reply = ${JSON.stringify(unrelatedReply)};
+      const yearClarifyMatch = reply.match(/this year\\s*\\((\\d{4})\\)/i) || reply.match(/este año\\s*\\((\\d{4})\\)/i);
+      if (yearClarifyMatch) {
+        const statedYear = yearClarifyMatch[1];
+        const actualYear = String(new Date().getFullYear());
+        if (statedYear !== actualYear) {
+          reply = reply.replace(statedYear, actualYear);
+        }
+      }
+      return reply;
+    })()
+  `);
+  check("Unrelated replies with no year pattern pass through completely untouched", stillUnrelated === unrelatedReply);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -786,6 +871,7 @@ async function testJobAddressConfirmationDoesNotRetrigger() {
     await testUnifiedAddressBplwAndContractorPurposes();
     await testDateYearValidation();
     await testJobAddressConfirmationDoesNotRetrigger();
+    await testAiStatedWrongYearGetsCorrected();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
