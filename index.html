@@ -687,17 +687,19 @@ ${invoiceType!=="materials"?`5. What work did you perform? Ask ONE TASK AT A TIM
 ${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase materials? Walk through ONE RECEIPT AT A TIME, asking ONE QUESTION AT A TIME — do not combine multiple questions into one message:
    a. "Where did you buy it?" (vendor)
    b. "What did you buy?" (item/description)
-   c. "What date was it purchased?" (date)
+   c. "What date was it purchased?" (date) — If the user's answer doesn't include a year (e.g. "May 5" or "5/5"), ask "Got it — and was that this year (${new Date().getFullYear()}), or a different year?" before moving on. Only proceed once the date includes a full year.
    d. "How much did it cost?" (amount)
    After step d, say exactly "Got it. Want to add a photo of this receipt?" The app will show photo buttons — wait for the user's response before continuing.
    After the photo step, ask "Any other receipts to add right now?" If yes, repeat steps a-d and the photo step for the next receipt. If no, say "Okay, that's it for now. If you think of more receipts later, you can save this invoice on the next screen and come back to add them." then continue to the next step. Each detail goes into its own field (vendor, desc, date, amount) — never combine them into one string.`:""}
-${invoiceType==="both"?"7":"6"}. ${invoiceType==="materials"?`What date should go on this invoice? (e.g. today's date, or the date of the last receipt)`:`Date work was completed?`}
+${invoiceType==="both"?"7":"6"}. ${invoiceType==="materials"?`What date should go on this invoice? (e.g. today's date, or the date of the last receipt)`:`Date work was completed?`} If the user's answer doesn't include a year, ask "Got it — and was that this year (${new Date().getFullYear()}), or a different year?" before moving on. Only proceed once the date includes a full year.
 ${invoiceType==="both"?"8":"7"}. Confirm all details. Show the full built address. ${invoiceType!=="labor"?`After the summary, remind the user: "Remember, you can save this invoice and add more receipts later if you need to." `:""}If anything needs correction, say "Please tell me what to fix."
 
 CORRECTION HANDLING: If user says something needs fixing, list the collected fields as a numbered menu and ask which to change. Then:
 - If they pick Client, Ordered by, Street, Unit, or Date: ask only that specific question again
 - If they pick Work items/tasks: list ALL existing tasks with numbers (e.g. "1. Replace ceiling fan - $110  2. Paint ceiling - $480") and ask "Which task number do you want to change, or type 'add' to add a new task?"
 - If they pick a specific task number: ask "What should task [N] be? Give me the description and price."
+
+YEAR CLARIFICATION: If the app tells you a date is missing a year and asks the user to clarify, and the user responds "It was [year]" or confirms the current year — update that specific date (add the year) and then re-emit the complete JSON with "done":true, exactly as before, with the corrected date included. Do not restart the whole interview. If the user instead says "a different year" without specifying which, ask "What year was it?" before re-emitting the JSON.
 - Make only the requested change, keep everything else the same.
 
 When you have EVERYTHING respond ONLY with valid JSON:
@@ -963,6 +965,17 @@ function showYesNoChips(){
   });
 }
 
+function showYearClarifyChips(label,thisYear){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const chip1=document.createElement("div");chip1.className="chip new";
+  chip1.textContent=t(`Sí, fue en ${thisYear}`,`Yes, it was ${thisYear}`);
+  chip1.onclick=()=>{document.getElementById("userInput").value=t(`Fue en ${thisYear}`,`It was ${thisYear}`);sendMsg();};
+  const chip2=document.createElement("div");chip2.className="chip warn";
+  chip2.textContent=t("Fue un año diferente","It was a different year");
+  chip2.onclick=()=>{document.getElementById("userInput").value=t("Fue un año diferente, déjame decirte cuál","It was a different year, let me tell you which");sendMsg();};
+  area.appendChild(chip1);area.appendChild(chip2);
+}
+
 async function callClaude(userText,isRetry){
   if(!isRetry) messages.push({role:"user",content:userText});
   showTyping();
@@ -988,6 +1001,17 @@ async function callClaude(userText,isRetry){
         const jm=reply.match(/\{[\s\S]*"done"\s*:\s*true[\s\S]*\}/);
         if(jm){
           invoiceData=JSON.parse(jm[0]);
+          const missingYearDates=findMissingYearDates(invoiceData);
+          if(missingYearDates.length>0){
+            const first=missingYearDates[0];
+            const thisYear=new Date().getFullYear();
+            addAIMsg(t(
+              `Veo que la ${first.label} ("${first.value}") no incluye el año. ¿Fue en ${thisYear}, o un año diferente?`,
+              `I see the ${first.label} ("${first.value}") doesn't include a year. Was that ${thisYear}, or a different year?`
+            ));
+            showYearClarifyChips(first.label, thisYear);
+            return;
+          }
           if(invoiceData.bill_to_phone) invoiceData.bill_to_phone=formatPhone(invoiceData.bill_to_phone);
           if(invoiceData.new_client&&invoiceData.new_client.name){
             if(invoiceData.new_client.phone) invoiceData.new_client.phone=formatPhone(invoiceData.new_client.phone);
@@ -1345,6 +1369,18 @@ function formatPhone(raw){
     return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`;
   }
   return raw.trim();
+}
+function dateHasYear(dateStr){
+  if(!dateStr) return true; // blank dates aren't this check's concern
+  return /\b\d{4}\b/.test(dateStr);
+}
+function findMissingYearDates(d){
+  const missing=[];
+  if(d.date&&!dateHasYear(d.date)) missing.push({label:"invoice date",value:d.date});
+  (d.materials_items||[]).forEach((item,i)=>{
+    if(item.date&&!dateHasYear(item.date)) missing.push({label:`receipt ${i+1} date (${item.vendor||item.desc||""})`,value:item.date});
+  });
+  return missing;
 }
 
 function showInvoicePreview(d,viewNum){
