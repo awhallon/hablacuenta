@@ -279,6 +279,16 @@ function startNewAddress(){
 }
 
 let newClientState=null; // tracks guided new-client entry flow
+let newJobAddrState=null; // tracks guided job-site address entry flow (generic mode)
+
+function startNewJobAddress(){
+  newJobAddrState={step:"street",data:{}};
+  addAIMsg(t(
+    "Vamos a agregar la dirección del trabajo. Te voy a preguntar lo siguiente:\n1. Dirección de la calle\n2. Número de unidad o suite (si hay)\n3. Ciudad\n4. Estado\n5. Código postal\n\n¿Cuál es la dirección de la calle?",
+    "We're going to add the job site address. I'm going to ask you for the following information:\n1. Street address\n2. Unit or suite number, if there is one\n3. City\n4. State\n5. Zip code\n\nWhat is the street address?"
+  ));
+  document.getElementById("chipArea").innerHTML="";
+}
 
 function startNewClient(){
   newClientState={step:"name",data:{}};
@@ -463,6 +473,72 @@ function handleNewClientInput(text){
     newClientState.step="summary";
     addAIMsg(newClientSummaryText());
     showNewClientSummaryChips();
+    return true;
+  }
+  return false;
+}
+
+function handleNewJobAddrInput(text){
+  if(!newJobAddrState) return false;
+  const s=newJobAddrState.step;
+  const lower=text.toLowerCase().trim();
+  const isSkip=lower==="omitir"||lower==="skip";
+
+  if(s==="street"){
+    newJobAddrState.data.street=isSkip?"":text.trim();
+    newJobAddrState.step="unit_yn";
+    addAIMsg(t("¿Hay número o letra de apartamento/suite/unidad? Si sí, escríbelo directamente. Si no, escribe No.","Is there a suite, unit, or apartment number? If yes, type it. If no, type No."));
+    showYesNoChips();
+    return true;
+  }
+  if(s==="unit_yn"){
+    const isNo=lower==="no"||lower==="nope"||lower==="none"||lower==="n";
+    const isYes=lower==="yes"||lower==="sí"||lower==="si"||lower==="y";
+    if(isSkip||isNo){
+      newJobAddrState.data.unit="";
+    } else {
+      newJobAddrState.data.unit=text.trim();
+      if(isYes){
+        newJobAddrState.step="unit_number";
+        addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the suite/unit number or letter?"));
+        return true;
+      }
+    }
+    newJobAddrState.step="city";
+    addAIMsg(t("¿Cuál es la ciudad?","What city?"));
+    return true;
+  }
+  if(s==="unit_number"){
+    newJobAddrState.data.unit=isSkip?"":text.trim();
+    newJobAddrState.step="city";
+    addAIMsg(t("¿Cuál es la ciudad?","What city?"));
+    return true;
+  }
+  if(s==="city"){
+    newJobAddrState.data.city=isSkip?"":text.trim();
+    newJobAddrState.step="state";
+    addAIMsg(t("¿Cuál es el estado?","What state?"));
+    return true;
+  }
+  if(s==="state"){
+    newJobAddrState.data.state=isSkip?"":text.trim();
+    newJobAddrState.step="zip";
+    addAIMsg(t("¿Cuál es el código postal?","What zip code?"));
+    return true;
+  }
+  if(s==="zip"){
+    newJobAddrState.data.zip=isSkip?"":text.trim();
+    const a=newJobAddrState.data;
+    const unitPart=(a.unit&&a.unit.trim())?` Unit ${a.unit.trim()}`:"";
+    const cityStateZip=[a.city,a.state,a.zip].filter(Boolean).join(a.state||a.zip?" ":", ");
+    const fullAddress=[`${(a.street||"").trim()}${unitPart}`,cityStateZip].filter(Boolean).join(", ");
+    newJobAddrState=null;
+    convStage="tasks";
+    addAIMsg(t(`Dirección guardada: ${fullAddress}.`,`Address saved: ${fullAddress}.`));
+    const handoffMsg=`[App note: the job address has already been fully collected as "${fullAddress}" — do NOT ask for it again. Proceed directly to the next step of the invoice.] The job address is ${fullAddress}.`;
+    lastUserText=handoffMsg;
+    addUserMsg(fullAddress);
+    callClaude(handoffMsg,false);
     return true;
   }
   return false;
@@ -698,11 +774,11 @@ CONTRACTOR: ${displayName}, ${contractorInfo.address}, Phone: ${contractorInfo.p
 
 ${clientSection}
 
-JOB ADDRESS: ${isGeneric?`Ask "What's the job address?" and accept whatever the user types.`:`The app will provide the full job address directly. Use it exactly as provided.`}
+JOB ADDRESS: ${isGeneric?`Ask "What's the job address?" The app will guide the user through a structured step-by-step entry (street, unit, city, state, zip) — you do NOT need to ask for these pieces yourself. Just wait for the app to hand control back to you with the full address.`:`The app will provide the full job address directly. Use it exactly as provided.`}
 
 FLOW — ONE question at a time:
 ${flowStep1}
-${jobAddressStepNum}. ${isGeneric?`Ask for the job address: "What's the job address?"`:`Ask for the job address. Do NOT list addresses or streets in your response — just ask "Which address was the job at?" The app will show address buttons.`}
+${jobAddressStepNum}. ${isGeneric?`Ask for the job address: "What's the job address?" The app will guide the user through entering it step by step.`:`Ask for the job address. Do NOT list addresses or streets in your response — just ask "Which address was the job at?" The app will show address buttons.`}
 ${invoiceType!=="materials"?`5. What work did you perform? Ask ONE TASK AT A TIME: "What was the first task and price?" then "Any other tasks? If yes, what and how much?" Repeat until done.`:""}
 ${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase materials? Walk through ONE RECEIPT AT A TIME, asking ONE QUESTION AT A TIME — do not combine multiple questions into one message:
    a. "Where did you buy it?" (vendor)
@@ -854,7 +930,7 @@ function continueIncomplete(i){
 }
 
 function resetChat(){
-  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;newClientState=null;showBackBtn(false);
+  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;newClientState=null;newJobAddrState=null;showBackBtn(false);
   document.getElementById("chatBox").innerHTML="";
   document.getElementById("chipArea").innerHTML="";
   document.getElementById("invoiceArea").innerHTML="";
@@ -1095,6 +1171,7 @@ function smartChips(reply){
   }
   // Job address / location question
   if(lower.includes("which address")||lower.includes("which street")||lower.includes("what street")||lower.includes("street is the job")||lower.includes("street was the work")||lower.includes("job location")||lower.includes("job address")||lower.includes("where was the job")||lower.includes("location of the job")||lower.includes("address was the job")||lower.includes("address of the job")){
+    if(contractorInfo.mode==="generic"){ startNewJobAddress(); return; }
     setChips("street"); return;
   }
   // Receipt photo prompt
@@ -1334,6 +1411,12 @@ function sendMsg(){
   if(newClientState){
     addUserMsg(text);inp.value="";
     handleNewClientInput(text);
+    return;
+  }
+  // Handle new job address flow (generic mode)
+  if(newJobAddrState){
+    addUserMsg(text);inp.value="";
+    handleNewJobAddrInput(text);
     return;
   }
   addUserMsg(text);inp.value="";callClaude(text,false);
