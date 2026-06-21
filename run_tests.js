@@ -1,0 +1,263 @@
+const { JSDOM } = require('jsdom');
+const fs = require('fs');
+const html = fs.readFileSync('index.html', 'utf8');
+
+let passed = 0;
+let failed = 0;
+const failures = [];
+
+function check(label, condition, detail) {
+  if (condition) {
+    passed++;
+    console.log(`  ✓ ${label}`);
+  } else {
+    failed++;
+    failures.push(`${label}${detail ? ' — ' + detail : ''}`);
+    console.log(`  ✗ ${label}${detail ? ' — ' + detail : ''}`);
+  }
+}
+
+function freshDom() {
+  let pageHtml = html.replace(/<script src="https:\/\/cdnjs[^>]*><\/script>/, '');
+  // Mock jsPDF with the chainable API surface buildPDF() actually calls
+  function MockJsPDF(opts) {
+    this.opts = opts;
+  }
+  const chainMethods = ["setFontSize","setFont","setTextColor","text","setDrawColor","setLineWidth","line","setFillColor","roundedRect","splitTextToSize","addPage","addImage"];
+  chainMethods.forEach(m => {
+    MockJsPDF.prototype[m] = function(...args) {
+      if (m === "splitTextToSize") return [String(args[0])];
+      return this;
+    };
+  });
+  MockJsPDF.prototype.output = function(type) { return new Blob(["fake-pdf-content"], {type:"application/pdf"}); };
+
+  const dom = new JSDOM(pageHtml, {
+    runScripts: "dangerously",
+    resources: "usable",
+    url: "https://hablacuenta.com/",
+    beforeParse(window) {
+      window.jspdf = { jsPDF: MockJsPDF };
+    }
+  });
+  // Helper: access let/const top-level variables, which aren't exposed as window properties in jsdom's vm context
+  dom.window.get = (expr) => dom.window.eval(expr);
+  dom.window.set = (varName, value) => dom.window.eval(`${varName} = ${JSON.stringify(value)}`);
+  dom.window.call = (expr) => dom.window.eval(expr);
+  return dom;
+}
+
+function wait(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+async function testBPLWFlow() {
+  console.log("\n=== TEST SUITE 1: BPLW Materials Invoice (Alfonso's default flow) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  check("App initializes with BPLW mode by default", win.get("contractorInfo.mode") === "bplw");
+  check("Greeting shows default firstName", win.document.getElementById("chatBox").innerHTML.includes("Alfonso"));
+
+  // Simulate picking Materials Only
+  win.eval('invoiceType = "materials"; convStage = "client_type";');
+
+  // Simulate AI asking for partner -> picking Richard Baisz
+  win.eval('currentOrderedBy = "Richard Baisz"; convStage = "street";');
+
+  // Simulate address chip click building the full address
+  const addresses = win.eval('getClientAddresses("Richard Baisz")');
+  check("Richard Baisz has no preset addresses (each partner manages own properties)", addresses.length === 0);
+
+  const andrewAddresses = win.eval('getClientAddresses("Andrew Whallon")');
+  check("Andrew Whallon has preset addresses", andrewAddresses.length > 0, `found ${andrewAddresses.length}`);
+
+  // Simulate full invoiceData as if AI returned it
+  win.eval(`invoiceData = ${JSON.stringify({
+    done: true,
+    client_type: "bplw",
+    bill_to_name: "BPLW Management",
+    bill_to_address: "PO Box 9395, Long Beach CA 90810",
+    bill_to_email: "baisz@sbcglobal.net",
+    bill_to_phone: "310-809-3856",
+    ordered_by: "Richard Baisz",
+    job_address: "1001 Cherry Ave Unit 101, Long Beach CA 90813",
+    work_items: [],
+    materials_items: [
+      { vendor: "Home Depot", desc: "Paint", date: "6-15-2026", amount: 45.99 },
+      { vendor: "Ace Hardware", desc: "Screws", date: "6-16-2026", amount: 8.50 }
+    ],
+    date: "6-20-2026",
+    has_materials: true,
+    has_labor: false,
+    new_client: null
+  })}; receipts = []; jobPhotos = [];`);
+
+  win.document.getElementById("photoSections").style.display = "block";
+  win.document.getElementById("receiptSection").style.display = "block";
+  win.eval('showInvoicePreview(invoiceData)');
+  await wait(100);
+
+  const invoiceArea = win.document.getElementById("invoiceArea").innerHTML;
+  check("Invoice preview shows BPLW Management as Bill To", invoiceArea.includes("BPLW Management"));
+  check("Invoice preview shows Richard Baisz as Ordered By", invoiceArea.includes("Richard Baisz"));
+  check("Invoice preview shows job address", invoiceArea.includes("1001 Cherry Ave Unit 101"));
+  check("Invoice preview shows Home Depot vendor", invoiceArea.includes("Home Depot"));
+  check("Invoice preview shows materials date", invoiceArea.includes("6-15-2026"));
+  check("Invoice preview total is correct ($54.49)", invoiceArea.includes("54.49"), "expected sum of 45.99+8.50");
+  check("From shows Alfonso's business name (default)", invoiceArea.includes("Alfonso Sanchez Property Services"));
+
+  // Test PDF build (without actually rendering, just checking it doesn't throw)
+  try {
+    const builtOk = win.eval('(async () => { try { const b = await buildPDF("materials"); return JSON.stringify({ok:true, invNum:b.invNum, matNum}); } catch(e) { return JSON.stringify({ok:false, err:e.message}); } })()');
+    const result = await builtOk;
+    const parsed = JSON.parse(result);
+    check("buildPDF executes without error for materials", parsed.ok, parsed.err);
+    if (parsed.ok) check("buildPDF returns correct invoice number", parsed.invNum === parsed.matNum);
+  } catch (e) {
+    check("buildPDF executes without error for materials", false, e.message);
+  }
+
+  // Test History recording
+  const beforeHistoryLen = win.eval('invoiceHistory.length');
+  win.eval('recordInvoiceHistory("materials", matNum)');
+  const afterHistoryLen = win.eval('invoiceHistory.length');
+  check("Invoice history grows after recording", afterHistoryLen === beforeHistoryLen + 1);
+  const firstEntryAddr = win.eval('invoiceHistory[0].invoiceData.job_address');
+  check("Recorded history entry has correct job address", firstEntryAddr.includes("1001 Cherry Ave"));
+}
+
+async function testGenericMode() {
+  console.log("\n=== TEST SUITE 2: Generic Mode (non-BPLW contractor) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // Configure as generic contractor
+  win.eval('showSettings()');
+  win.document.getElementById("setFirstName").value = "Adrian";
+  win.document.getElementById("setLastName").value = "Quintana";
+  win.document.getElementById("setBusinessName").value = "";
+  win.document.getElementById("setAddress").value = "1952 Caspian Avenue, Long Beach CA";
+  win.document.getElementById("setPhone").value = "555-1212";
+  win.document.getElementById("setMode").value = "generic";
+  win.eval('saveSettingsForm()');
+
+  check("Settings saved generic mode", win.eval("contractorInfo.mode") === "generic");
+  check("Header updated to First Last (no business name)", win.document.getElementById("headerTitleText").textContent.includes("Adrian Quintana"));
+
+  win.eval('resetChat()');
+  await wait(100);
+  check("Greeting uses firstName only", win.document.getElementById("chatBox").innerHTML.includes("Hi Adrian!"));
+
+  // Test empty client list shows + New client chip
+  win.eval('invoiceType = "materials"; showSavedClientChips();');
+  const chipArea = win.document.getElementById("chipArea").innerHTML;
+  check("Empty client list still shows +New client chip", chipArea.includes("New client"), "this was the actual bug reported by tester");
+
+  // Add a client and verify it shows as a chip
+  win.eval(`addClient({ name: "Test Client Co", address: "456 Demo St", email: "test@example.com", phone: "555-9999" })`);
+  win.eval('showSavedClientChips()');
+  const chipArea2 = win.document.getElementById("chipArea").innerHTML;
+  check("After adding a client, chip shows their name", chipArea2.includes("Test Client Co"));
+  check("New client chip still present alongside saved clients", chipArea2.includes("New client"));
+
+  // Simulate completed generic invoice
+  win.eval(`invoiceData = ${JSON.stringify({
+    done: true,
+    client_type: "generic",
+    bill_to_name: "Test Client Co",
+    bill_to_address: "456 Demo St",
+    bill_to_email: "test@example.com",
+    bill_to_phone: "555-9999",
+    ordered_by: "",
+    job_address: "789 Job Site Rd",
+    work_items: [{ desc: "Fix fence", amount: 200 }],
+    materials_items: [],
+    date: "6-20-2026",
+    has_materials: false,
+    has_labor: true,
+    new_client: null
+  })}; invoiceType = "labor"; showInvoicePreview(invoiceData);`);
+  await wait(100);
+  const invoiceArea = win.document.getElementById("invoiceArea").innerHTML;
+  check("Generic invoice shows correct From (Adrian Quintana, no business name)", invoiceArea.includes("Adrian Quintana"));
+  check("Generic invoice hides 'Ordered By' when blank", !invoiceArea.includes("Ordered By"));
+  check("Generic invoice shows bill-to client", invoiceArea.includes("Test Client Co"));
+  check("Generic invoice shows job address", invoiceArea.includes("789 Job Site Rd"));
+}
+
+async function testSettingsMigration() {
+  console.log("\n=== TEST SUITE 3: Settings Migration (old single-name format) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  win.localStorage.setItem("contractor_info", JSON.stringify({
+    name: "Old Format Contractor",
+    address: "Old Address",
+    phone: "555-0000",
+    mode: "generic"
+  }));
+  await wait(300);
+  const infoJson = win.eval("JSON.stringify(loadContractorInfo())");
+  const info = JSON.parse(infoJson);
+  check("Migrated firstName equals old name", info.firstName === "Old Format Contractor");
+  check("Migrated businessName is blank (not duplicated)", info.businessName === "");
+  check("Migrated lastName is blank", info.lastName === "");
+  check("Old 'name' field removed after migration", !("name" in info));
+}
+
+async function testPanelNavigation() {
+  console.log("\n=== TEST SUITE 4: Panel Navigation (stacking bug regression check) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.showHistory();
+  win.showSettings();
+  const historyDisplay = win.document.getElementById("historyPanel").style.display;
+  const settingsDisplay = win.document.getElementById("settingsPanel").style.display;
+  check("Only Settings panel visible after showSettings (History properly hidden)", historyDisplay === "none" && settingsDisplay === "block");
+
+  win.showManager();
+  win.showAddressManager();
+  const managerDisplay = win.document.getElementById("managerPanel").style.display;
+  const addrDisplay = win.document.getElementById("addressManagerPanel").style.display;
+  check("Only AddressManager visible after showAddressManager (Manager properly hidden)", managerDisplay === "none" && addrDisplay === "block");
+}
+
+async function testAlfonsoDeviceUnaffected() {
+  console.log("\n=== TEST SUITE 5: Regression Check — Alfonso's Untouched Device ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  check("Fresh device defaults to bplw mode", win.eval("contractorInfo.mode") === "bplw");
+  check("Fresh device firstName is Alfonso", win.eval("contractorInfo.firstName") === "Alfonso");
+  check("Fresh device businessName is full company name", win.eval("contractorInfo.businessName") === "Alfonso Sanchez Property Services");
+  check("Fresh device greeting says Hi Alfonso", win.document.getElementById("chatBox").innerHTML.includes("Hi Alfonso!"));
+
+  const sysPrompt = win.eval("getSystemPrompt()");
+  check("System prompt mentions BPLW for default mode", sysPrompt.includes("BPLW Management"));
+  check("System prompt does NOT mention generic-only client flow for BPLW mode", !sysPrompt.includes("there are no saved clients yet"));
+}
+
+(async () => {
+  try {
+    await testBPLWFlow();
+    await testGenericMode();
+    await testSettingsMigration();
+    await testPanelNavigation();
+    await testAlfonsoDeviceUnaffected();
+  } catch (e) {
+    console.log("FATAL TEST ERROR:", e.message);
+    console.log(e.stack);
+    failed++;
+  }
+
+  console.log(`\n${"=".repeat(50)}`);
+  console.log(`RESULTS: ${passed} passed, ${failed} failed`);
+  if (failures.length) {
+    console.log("\nFAILURES:");
+    failures.forEach(f => console.log("  - " + f));
+  }
+  process.exit(failed > 0 ? 1 : 0);
+})();
