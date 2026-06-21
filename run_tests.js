@@ -1074,6 +1074,91 @@ async function testPhotoOrientationCorrection() {
     handlePhotoSource.includes("catch"));
 }
 
+async function testGenericModeJobAddressPersistence() {
+  console.log("\n=== TEST SUITE 19: Generic-Mode Job Address Persistence (regression for Adrian's reported bug) ===");
+
+  // Picking a saved client should set currentOrderedBy, which is required for address lookup
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+  win.eval(`
+    contractorInfo.mode = "generic";
+    addClient({name:"Andrew Whallon", address:"", email:"andywhallon@yahoo.com", phone:"562-882-8632"});
+    showSavedClientChips();
+  `);
+  // Simulate clicking the first saved-client chip
+  win.eval(`document.querySelector('#chipArea .chip:not(.new)').click()`);
+  check("Picking a saved client sets currentOrderedBy to that client's name", win.eval('currentOrderedBy') === "Andrew Whallon");
+
+  // First time asking for job address: no saved addresses yet, should launch the guided flow directly
+  await wait(100);
+  win.eval(`smartChips("What's the job address?")`);
+  check("With no saved addresses, the guided flow launches directly", win.eval('guidedAddrState !== null && guidedAddrState.purpose') === "job");
+  check("guidedAddrState meta carries the client name for persistence", win.eval('guidedAddrState.meta.clientName') === "Andrew Whallon");
+
+  // Complete the guided flow
+  win.eval(`document.getElementById("userInput").value = "1995 Canal Avenue"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "No"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "Long Beach"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "CA"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "90810"; sendMsg();`);
+  await wait(100);
+
+  // Confirm the address was actually persisted to this client's address book
+  const savedAddrs = JSON.parse(win.eval(`JSON.stringify(getClientAddresses("Andrew Whallon"))`));
+  check("The completed job address was saved to the client's address book", savedAddrs.length === 1, `found ${savedAddrs.length} addresses`);
+  check("Saved address includes the full street/city/state/zip", savedAddrs[0] && savedAddrs[0].full.includes("1995 Canal Avenue") && savedAddrs[0].full.includes("Long Beach"));
+
+  const savedMsg = win.document.getElementById("chatBox").innerHTML;
+  check("Confirmation message tells the user the address will be remembered next time",
+    savedMsg.toLowerCase().includes("remember"));
+
+  // Second invoice for the SAME client: this time it should offer the saved address as a chip,
+  // not silently re-run the entire 5-question guided flow from scratch
+  win.eval(`resetChat(); contractorInfo.mode = "generic"; currentOrderedBy = "Andrew Whallon";`);
+  win.eval(`smartChips("What's the job address?")`);
+  check("On the second invoice, the guided flow does NOT launch again (a saved address exists)",
+    win.eval('guidedAddrState') === null);
+  const chipArea = win.document.getElementById("chipArea").innerHTML;
+  check("The previously-saved address appears as a selectable chip", chipArea.includes("1995 Canal Avenue"));
+  check("A '+ Add new address' option is still available for a different job site", chipArea.includes("Add new address") || chipArea.includes("Nueva dirección"));
+
+  // Clicking the saved-address chip should hand off correctly without re-running the guided flow
+  win.eval(`document.querySelector('#chipArea .chip:not(.new)').click()`);
+  await wait(100);
+  const handoffMsg = win.eval('messages[messages.length-1].content');
+  check("Clicking the saved address chip hands off the full address to the AI", handoffMsg.includes("1995 Canal Avenue"));
+  check("guidedAddrState was never launched when using a saved address chip", win.eval('guidedAddrState') === null);
+}
+
+async function testAndrewWhallonNameCollisionFix() {
+  console.log("\n=== TEST SUITE 20: Andrew Whallon Name Collision Fix (regression for cross-contamination bug) ===");
+
+  // In BPLW mode, "Andrew Whallon" should still correctly get Alfonso's real preloaded addresses
+  const domBplw = freshDom();
+  const winBplw = domBplw.window;
+  await wait(300);
+  const bplwAddrs = JSON.parse(winBplw.eval(`JSON.stringify(getClientAddresses("Andrew Whallon"))`));
+  check("BPLW mode: Andrew Whallon still gets the preloaded Long Beach address list", bplwAddrs.length > 0);
+
+  // In generic mode, a client who happens to ALSO be named "Andrew Whallon" must NOT see
+  // Alfonso's real preloaded addresses — this was the actual collision bug
+  const domGeneric = freshDom();
+  const winGeneric = domGeneric.window;
+  await wait(300);
+  winGeneric.eval(`contractorInfo.mode = "generic";`);
+  const genericAddrs = JSON.parse(winGeneric.eval(`JSON.stringify(getClientAddresses("Andrew Whallon"))`));
+  check("Generic mode: a same-named client does NOT inherit Alfonso's preloaded BPLW addresses",
+    genericAddrs.length === 0, `found ${genericAddrs.length} addresses, expected 0`);
+
+  // After saving an address for this generic-mode client, only that address should appear —
+  // never mixed in with the BPLW preloaded list
+  winGeneric.eval(`saveClientAddress("Andrew Whallon", {id:"x", display:"999 Adrian St", full:"999 Adrian St, Riverside CA 92501"})`);
+  const genericAddrsAfterSave = JSON.parse(winGeneric.eval(`JSON.stringify(getClientAddresses("Andrew Whallon"))`));
+  check("Generic mode: only the contractor's own saved address appears, not BPLW's list",
+    genericAddrsAfterSave.length === 1 && genericAddrsAfterSave[0].full.includes("Riverside"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -1094,6 +1179,8 @@ async function testPhotoOrientationCorrection() {
     await testConfirmationTriggerMatchesActualPromptWording();
     await testCombinedLaborMaterialsInvoice();
     await testPhotoOrientationCorrection();
+    await testGenericModeJobAddressPersistence();
+    await testAndrewWhallonNameCollisionFix();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
