@@ -354,6 +354,7 @@ let savedClients=loadClients();
 let incompleteInvoices=loadIncomplete();
 let jobPhotos=[];
 let receipts=[];
+let pendingPhotoChipMsg=null; // tracks in-conversation receipt photo capture
 
 function loadClients(){try{return JSON.parse(localStorage.getItem("alfonso_clients")||"[]");}catch(e){return[];}}
 function saveClients(){try{localStorage.setItem("alfonso_clients",JSON.stringify(savedClients));}catch(e){}}
@@ -404,7 +405,8 @@ ${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase 
    b. "What did you buy?" (item/description)
    c. "What date was it purchased?" (date)
    d. "How much did it cost?" (amount)
-   After all four are collected for this receipt, ask "Any other receipts?" If yes, repeat steps a-d for the next receipt. Each detail goes into its own field (vendor, desc, date, amount) — never combine them into one string.`:""}
+   After step d, say exactly "Got it. Want to add a photo of this receipt?" The app will show photo buttons — wait for the user's response before continuing.
+   After the photo step, ask "Any other receipts?" If yes, repeat steps a-d and the photo step for the next receipt. Each detail goes into its own field (vendor, desc, date, amount) — never combine them into one string.`:""}
 ${invoiceType==="both"?"7":"6"}. Date work was completed?
 ${invoiceType==="both"?"8":"7"}. Confirm all details. Show the full built address. If anything needs correction, say "Please tell me what to fix."
 
@@ -576,6 +578,24 @@ function showAddressChips(){
 
 function showStreetChips(){showAddressChips();}
 function showUnitChips(street){showAddressChips();}
+function showReceiptPhotoChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const photoChip=document.createElement("div");photoChip.className="chip new";
+  photoChip.textContent=t("📷 Tomar foto","📷 Take photo");
+  photoChip.onclick=()=>{
+    area.innerHTML="";
+    pendingPhotoChipMsg="📷 Photo added";
+    triggerPhoto("receipt");
+  };
+  const skipChip=document.createElement("div");skipChip.className="chip";
+  skipChip.textContent=t("Omitir","Skip");
+  skipChip.onclick=()=>{
+    area.innerHTML="";
+    document.getElementById("userInput").value=t("Omitir foto","Skip photo");
+    sendMsg();
+  };
+  area.appendChild(photoChip);area.appendChild(skipChip);
+}
 function showYesNoChips(){
   const area=document.getElementById("chipArea");area.innerHTML="";
   [t("Sí","Yes"),t("No","No")].forEach(o=>{
@@ -691,6 +711,10 @@ function smartChips(reply){
   // Job address / location question
   if(lower.includes("which address")||lower.includes("which street")||lower.includes("what street")||lower.includes("street is the job")||lower.includes("street was the work")||lower.includes("job location")||lower.includes("job address")||lower.includes("where was the job")||lower.includes("location of the job")||lower.includes("address was the job")||lower.includes("address of the job")){
     setChips("street"); return;
+  }
+  // Receipt photo prompt
+  if(lower.includes("add a photo of this receipt")||lower.includes("agregar una foto de este recibo")){
+    showReceiptPhotoChips(); return;
   }
   // Yes/No
   if(lower.includes("another task")||lower.includes("any other task")||lower.includes("another receipt")||lower.includes("any other receipt")||lower.includes("otra tarea")||lower.includes("otro recibo")){
@@ -823,7 +847,13 @@ function handlePhoto(type,event){
   reader.onload=function(e){
     const dataUrl=e.target.result;
     if(type==="job"){if(jobPhotos.length>=8){alert("Max 8 photos.");return;}jobPhotos.push(dataUrl);renderJobPhotos();}
-    else{receipts.push({dataUrl});renderReceipts();}
+    else{
+      receipts.push({dataUrl});renderReceipts();
+      if(pendingPhotoChipMsg){
+        const msg=pendingPhotoChipMsg;pendingPhotoChipMsg=null;
+        document.getElementById("userInput").value=msg;sendMsg();
+      }
+    }
   };
   reader.readAsDataURL(file);event.target.value="";
 }
