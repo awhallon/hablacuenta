@@ -946,6 +946,134 @@ async function testConfirmationTriggerMatchesActualPromptWording() {
   }
 }
 
+async function testCombinedLaborMaterialsInvoice() {
+  console.log("\n=== TEST SUITE 17: Combined Labor + Materials Invoice (regression for Adrian's reported bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`
+    invoiceType = "both";
+    invoiceData = {
+      done: true, client_type: "generic",
+      bill_to_name: "Test Client", bill_to_address: "123 Main St", bill_to_email: "test@example.com", bill_to_phone: "555-123-4567",
+      ordered_by: "", job_address: "456 Job Site Rd",
+      work_items: [{desc:"Repair sprinkler system", amount:500}],
+      materials_items: [{vendor:"Home Depot", desc:"PVC pipe", date:"June 3, 2026", amount:35.12}],
+      date: "June 3, 2026", has_materials: true, has_labor: true, new_client: null
+    };
+    receipts = []; jobPhotos = [];
+    document.getElementById("photoSections").style.display = "block";
+    document.getElementById("receiptSection").style.display = "block";
+    showInvoicePreview(invoiceData);
+  `);
+  await wait(100);
+
+  const invoiceArea = win.document.getElementById("invoiceArea").innerHTML;
+  const cardCount = (invoiceArea.match(/class="invoice-preview"/g) || []).length;
+  check("Combined invoice renders as ONE invoice card, not two", cardCount === 1, `found ${cardCount} cards`);
+  check("Combined invoice header mentions both Labor and Materials", invoiceArea.includes("Labor") && invoiceArea.includes("Materials"));
+  check("Combined invoice shows the Work Performed section", invoiceArea.includes("Repair sprinkler system"));
+  check("Combined invoice shows the Materials section", invoiceArea.includes("Home Depot"));
+  check("Combined invoice shows a Labor subtotal", invoiceArea.includes("Subtotal") && invoiceArea.includes("500.00"));
+  check("Combined invoice shows a Materials subtotal", invoiceArea.includes("35.12"));
+  check("Combined invoice shows ONE grand total of 535.12", invoiceArea.includes("535.12"));
+  check("Combined invoice has a single Generate PDF button (not two separate ones)",
+    (invoiceArea.match(/Generate.*PDF/g) || []).length === 1);
+  check("Combined invoice has a single Share Invoice button", (invoiceArea.match(/Share Invoice/g) || []).length === 1);
+
+  // Test buildPDF produces a single combined PDF object with the right invoice number
+  const builtInfo = win.eval(`
+    (async () => {
+      const built = await buildPDF("both");
+      return JSON.stringify({fname: built.fname, invNum: built.invNum, isCombined: built.isCombined});
+    })()
+  `);
+  const parsed = JSON.parse(await builtInfo);
+  check("buildPDF('both') returns a combined result", parsed.isCombined === true);
+  check("Combined PDF filename doesn't say 'Labor_Invoice' or 'Materials_Invoice' specifically", 
+    !parsed.fname.includes("Labor_Invoice") && !parsed.fname.includes("Materials_Invoice"));
+
+  // Test the correction menu offers both Work/Tasks AND Materials/Receipts for combined invoices
+  win.eval(`showCorrectionMenu("both")`);
+  const chipArea = win.document.getElementById("chipArea").innerHTML;
+  check("Correction menu for combined invoice offers Work/Tasks option", chipArea.includes("Work") || chipArea.includes("Tasks"));
+  check("Correction menu for combined invoice offers Materials/Receipts option", chipArea.includes("Materials") || chipArea.includes("Receipts"));
+
+  // Test history list correctly labels combined invoices
+  win.eval(`
+    invoiceHistory = [{type:"both", invNum:30001, invoiceData:{job_address:"456 Job Site Rd", date:"June 3, 2026"}, receipts:[], jobPhotos:[], created_at:new Date().toISOString()}];
+    renderHistoryList();
+  `);
+  const historyHtml = win.document.getElementById("historyList").innerHTML;
+  check("History list shows 'Labor & Materials' label for combined invoices, not just 'Materials'",
+    historyHtml.includes("Labor &amp; Materials") || historyHtml.includes("Labor & Materials"));
+}
+
+async function testPhotoOrientationCorrection() {
+  console.log("\n=== TEST SUITE 18: Photo Orientation Correction (regression for Adrian's reported bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // getExifOrientation should return 1 (normal) for non-JPEG data, never throw
+  const pngBuffer = win.eval(`
+    (function(){
+      const arr = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0, 0, 0, 0]); // PNG magic bytes, not JPEG
+      return getExifOrientation(arr.buffer);
+    })()
+  `);
+  check("getExifOrientation returns 1 (normal) for non-JPEG data without throwing", pngBuffer === 1);
+
+  // A JPEG with no EXIF APP1 segment at all should also return 1 safely
+  const bareJpeg = win.eval(`
+    (function(){
+      // Minimal JPEG SOI marker followed immediately by EOI, no EXIF segment
+      const arr = new Uint8Array([0xFF, 0xD8, 0xFF, 0xD9]);
+      return getExifOrientation(arr.buffer);
+    })()
+  `);
+  check("getExifOrientation returns 1 for a JPEG with no EXIF segment (and does not crash)", bareJpeg === 1);
+
+  // Truncated/corrupted JPEG data should never throw, just fall back to 1
+  const truncatedCases = [
+    [0xFF, 0xD8], // SOI only, nothing else
+    [0xFF, 0xD8, 0xFF], // dangling marker byte
+    [0xFF, 0xD8, 0xFF, 0xE1], // APP1 marker with no length/payload at all
+    [], // completely empty
+  ];
+  truncatedCases.forEach((bytes, idx) => {
+    const result = win.eval(`
+      (function(){
+        try {
+          const arr = new Uint8Array([${bytes.join(",")}]);
+          return getExifOrientation(arr.buffer);
+        } catch(e) {
+          return "THREW: " + e.message;
+        }
+      })()
+    `);
+    check(`Truncated JPEG case ${idx} (${bytes.length} bytes) does not crash`, result === 1, `got: ${result}`);
+  });
+
+  // correctImageOrientation should resolve immediately with the original dataUrl when orientation is 1 (no-op case)
+  const noOpResult = win.eval(`
+    (async () => {
+      const result = await correctImageOrientation("data:image/jpeg;base64,FAKE", 1);
+      return result;
+    })()
+  `);
+  const resolved = await noOpResult;
+  check("correctImageOrientation is a no-op when orientation is 1 (normal)", resolved === "data:image/jpeg;base64,FAKE");
+
+  // Verify handlePhoto is wired to call EXIF correction (checking the function source references it)
+  const handlePhotoSource = win.eval('handlePhoto.toString()');
+  check("handlePhoto calls getExifOrientation before storing the photo", handlePhotoSource.includes("getExifOrientation"));
+  check("handlePhoto calls correctImageOrientation before storing the photo", handlePhotoSource.includes("correctImageOrientation"));
+  check("handlePhoto has a fallback (try/catch) so a failed correction doesn't block adding the photo",
+    handlePhotoSource.includes("catch"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -964,6 +1092,8 @@ async function testConfirmationTriggerMatchesActualPromptWording() {
     await testAiStatedWrongYearGetsCorrected();
     await testFormattedSummaryPhoneFormatting();
     await testConfirmationTriggerMatchesActualPromptWording();
+    await testCombinedLaborMaterialsInvoice();
+    await testPhotoOrientationCorrection();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
