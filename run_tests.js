@@ -423,6 +423,58 @@ async function testNewClientFlow() {
   check("resetChat() clears in-progress newClientState", win3.eval('newClientState') === null);
 }
 
+async function testPhoneFormatting() {
+  console.log("\n=== TEST SUITE 8: Phone Number Formatting ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  check("Formats raw 10 digits", win.eval('formatPhone("5628828632")') === "562-882-8632");
+  check("Formats digits with spaces", win.eval('formatPhone("562 882 8632")') === "562-882-8632");
+  check("Formats digits with parens/dashes", win.eval('formatPhone("(562) 882-8632")') === "562-882-8632");
+  check("Formats 11-digit with leading 1", win.eval('formatPhone("15628828632")') === "562-882-8632");
+  check("Leaves already-correct format unchanged", win.eval('formatPhone("562-882-8632")') === "562-882-8632");
+  check("Leaves non-10/11-digit numbers as typed (e.g. international)", win.eval('formatPhone("+44 20 7946 0958")') === "+44 20 7946 0958");
+  check("Handles empty string without throwing", win.eval('formatPhone("")') === "");
+  check("Handles null/undefined gracefully", win.eval('formatPhone(null)') === null);
+
+  // Integration: new-client flow formats phone before saving
+  win.eval('startNewClient()');
+  win.eval(`document.getElementById("userInput").value = "Carlos Mendez"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // street
+  win.eval(`document.getElementById("userInput").value = "test@example.com"; sendMsg();`); // email
+  win.eval(`document.getElementById("userInput").value = "5551234567"; sendMsg();`); // phone, raw digits
+  check("New-client flow formats phone in summary step data", win.eval('newClientState.data.phone') === "555-123-4567");
+  win.eval(`document.getElementById("userInput").value = "Looks good"; sendMsg();`);
+  const clients = JSON.parse(win.eval('JSON.stringify(savedClients)'));
+  const saved = clients.find(c => c.name === "Carlos Mendez");
+  check("Saved client record has formatted phone", saved && saved.phone === "555-123-4567");
+
+  // Integration: editing phone from summary also formats it
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval('startNewClient()');
+  win2.eval(`document.getElementById("userInput").value = "Test User"; sendMsg();`);
+  win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`);
+  win2.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // email
+  win2.eval(`document.getElementById("userInput").value = "5559998888"; sendMsg();`); // phone
+  win2.eval(`document.getElementById("userInput").value = "Fix something"; sendMsg();`);
+  win2.eval(`document.getElementById("userInput").value = "Phone"; sendMsg();`);
+  win2.eval(`document.getElementById("userInput").value = "5550001111"; sendMsg();`); // corrected phone, raw digits
+  check("Editing phone field from summary applies formatting", win2.eval('newClientState.data.phone') === "555-000-1111");
+
+  // Integration: Settings contractor phone gets formatted
+  const dom3 = freshDom();
+  const win3 = dom3.window;
+  await wait(300);
+  win3.eval('showSettings()');
+  win3.document.getElementById("setFirstName").value = "Test";
+  win3.document.getElementById("setPhone").value = "5621234567";
+  win3.eval('saveSettingsForm()');
+  check("Settings contractor phone formatted on save", win3.eval('contractorInfo.phone') === "562-123-4567");
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -432,6 +484,7 @@ async function testNewClientFlow() {
     await testAlfonsoDeviceUnaffected();
     await testBackButtonVisibility();
     await testNewClientFlow();
+    await testPhoneFormatting();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
