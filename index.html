@@ -131,8 +131,12 @@ input[type=file]{display:none;}
     <div class="mgr-panel">
       <h3>Your Business Info</h3>
       <p style="font-size:12px;color:#888;margin-bottom:12px;">This appears as the "From" on every invoice you create on this device.</p>
-      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Business / Your Name</label>
-      <input id="setName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
+      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">First Name</label>
+      <input id="setFirstName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
+      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Last Name</label>
+      <input id="setLastName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
+      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Business Name (shown on invoices — leave blank to use your first/last name)</label>
+      <input id="setBusinessName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
       <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Address</label>
       <input id="setAddress" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
       <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Phone</label>
@@ -387,11 +391,25 @@ function handleNewAddressInput(text){
   return false;
 }
 
-const DEFAULT_CONTRACTOR_INFO={name:"Alfonso Sanchez Property Services",address:"310 Main Ave Apt 1, Long Beach CA 90802",phone:"562-533-7907",mode:"bplw"};
+const DEFAULT_CONTRACTOR_INFO={firstName:"Alfonso",lastName:"Sanchez",businessName:"Alfonso Sanchez Property Services",address:"310 Main Ave Apt 1, Long Beach CA 90802",phone:"562-533-7907",mode:"bplw"};
+function contractorDisplayName(info){
+  const full=[info.firstName,info.lastName].filter(Boolean).join(" ").trim();
+  return info.businessName||full||"";
+}
 function loadContractorInfo(){
   try{
     const saved=JSON.parse(localStorage.getItem("contractor_info"));
-    if(saved&&saved.name)return {mode:"bplw",...saved};
+    if(saved&&(saved.firstName||saved.name)){
+      // Migrate old single-field format if present: put it in firstName only,
+      // leave lastName/businessName blank so the user can re-enter cleanly
+      if(!saved.firstName&&saved.name){
+        saved.firstName=saved.name;
+        saved.lastName="";
+        saved.businessName="";
+        delete saved.name;
+      }
+      return {mode:"bplw",...saved};
+    }
   }catch(e){}
   return {...DEFAULT_CONTRACTOR_INFO};
 }
@@ -477,12 +495,13 @@ If new client: collect name, address, email, phone.`;
 2. Which partner ordered? You may list the partner names for clarity.`;
 
   const jobAddressStepNum=isGeneric?"2":"3";
+  const displayName=contractorDisplayName(contractorInfo);
 
-  return `You are a billing assistant for ${contractorInfo.name}. English only. Brief. ONE question at a time.
+  return `You are a billing assistant for ${displayName}. English only. Brief. ONE question at a time.
 
 ${invoiceTypeDesc}
 
-CONTRACTOR: ${contractorInfo.name}, ${contractorInfo.address}, Phone: ${contractorInfo.phone}
+CONTRACTOR: ${displayName}, ${contractorInfo.address}, Phone: ${contractorInfo.phone}
 
 ${clientSection}
 
@@ -557,7 +576,9 @@ function hideHistory(){
 function showSettings(){
   hideAllPanels();
   document.getElementById("settingsPanel").style.display="block";
-  document.getElementById("setName").value=contractorInfo.name;
+  document.getElementById("setFirstName").value=contractorInfo.firstName||"";
+  document.getElementById("setLastName").value=contractorInfo.lastName||"";
+  document.getElementById("setBusinessName").value=contractorInfo.businessName||"";
   document.getElementById("setAddress").value=contractorInfo.address;
   document.getElementById("setPhone").value=contractorInfo.phone;
   document.getElementById("setMode").value=contractorInfo.mode||"bplw";
@@ -568,16 +589,19 @@ function hideSettings(){
   document.getElementById("mainPanel").style.display="block";
 }
 function saveSettingsForm(){
-  const name=document.getElementById("setName").value.trim();
+  const firstName=document.getElementById("setFirstName").value.trim();
+  const lastName=document.getElementById("setLastName").value.trim();
+  const businessName=document.getElementById("setBusinessName").value.trim();
   const address=document.getElementById("setAddress").value.trim();
   const phone=document.getElementById("setPhone").value.trim();
   const mode=document.getElementById("setMode").value;
-  if(!name){alert("Business name is required.");return;}
-  contractorInfo={name,address,phone,mode};
+  if(!firstName){alert("First name is required.");return;}
+  contractorInfo={firstName,lastName,businessName,address,phone,mode};
   saveContractorInfo();
   document.getElementById("settingsSavedMsg").style.display="block";
-  document.getElementById("headerTitleText").textContent="📄 "+name;
-  document.title=name;
+  const displayName=contractorDisplayName(contractorInfo);
+  document.getElementById("headerTitleText").textContent="📄 "+displayName;
+  document.title=displayName;
 }
 function renderHistoryList(){
   const el=document.getElementById("historyList");
@@ -645,7 +669,7 @@ function resetChat(){
   document.getElementById("jobPhotoGrid").innerHTML="";
   document.getElementById("receiptList").innerHTML="";
   document.getElementById("receiptSection").style.display="none";
-  addAIMsg(t("¡Hola Alfonso! ¿Qué tipo de factura necesitas?","Hi Alfonso! What type of invoice do you need?"));
+  addAIMsg(t(`¡Hola ${contractorInfo.firstName}! ¿Qué tipo de factura necesitas?`,`Hi ${contractorInfo.firstName}! What type of invoice do you need?`));
   showInvoiceTypeChips();
 }
 
@@ -1120,6 +1144,7 @@ function showInvoicePreview(d,viewNum){
   const matTotal=(d.materials_items||[]).reduce((s,i)=>s+parseFloat(i.amount),0);
   const showLabor=d.has_labor||invoiceType==="labor"||invoiceType==="both";
   const showMat=(d.has_materials||invoiceType==="materials"||invoiceType==="both")&&d.materials_items&&d.materials_items.length>0;
+  const displayName=contractorDisplayName(contractorInfo);
   let html="";
 
   if(showLabor&&d.work_items&&d.work_items.length>0){
@@ -1127,7 +1152,7 @@ function showInvoicePreview(d,viewNum){
       <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Labor <span class="tag labor">Labor</span></h3>
       <div style="font-size:12px;color:#888;">#${viewNum||laborNum} &nbsp;·&nbsp; ${d.date}</div>
       <hr class="inv-sep">
-      <div class="inv-label">From</div><div>${contractorInfo.name}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
+      <div class="inv-label">From</div><div>${displayName}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
       <hr class="inv-sep">
       <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
       <hr class="inv-sep">
@@ -1149,7 +1174,7 @@ function showInvoicePreview(d,viewNum){
       <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Materials <span class="tag mat">Materials</span></h3>
       <div style="font-size:12px;color:#888;">#${viewNum||matNum} &nbsp;·&nbsp; ${d.date}</div>
       <hr class="inv-sep">
-      <div class="inv-label">From</div><div>${contractorInfo.name}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
+      <div class="inv-label">From</div><div>${displayName}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
       <hr class="inv-sep">
       <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
       <hr class="inv-sep">
@@ -1230,7 +1255,7 @@ async function buildPDF(type,forceNum){
   function hline(){doc.setDrawColor(220);doc.setLineWidth(0.5);doc.line(M,y,W-M,y);y+=14;}
   function secLabel(str){doc.setFontSize(8);doc.setFont("helvetica","normal");doc.setTextColor(150);doc.text(str.toUpperCase(),M,y);y+=5;hline();}
   doc.setFontSize(17);doc.setFont("helvetica","bold");doc.setTextColor(20);
-  doc.text(contractorInfo.name,M,y);y+=20;
+  doc.text(contractorDisplayName(contractorInfo),M,y);y+=20;
   doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(100);
   doc.text(`${contractorInfo.address}   |   ${contractorInfo.phone}`,M,y);y+=24;
   const isLabor=type==="labor";
@@ -1304,7 +1329,7 @@ async function shareInvoicePDF(type,forceNum){
   const {doc,fname,isLabor,invNum}=built;
   const blob=doc.output("blob");
   const file=new File([blob],fname,{type:"application/pdf"});
-  const shareText=`${isLabor?"Labor":"Materials"} invoice from ${contractorInfo.name}.`;
+  const shareText=`${isLabor?"Labor":"Materials"} invoice from ${contractorDisplayName(contractorInfo)}.`;
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{
       await navigator.share({files:[file],title:fname,text:shareText});
@@ -1488,8 +1513,9 @@ function startAddressManagerAdd(){
 }
 
 function applyContractorInfoToHeader(){
-  document.getElementById("headerTitleText").textContent="📄 "+contractorInfo.name;
-  document.title=contractorInfo.name;
+  const displayName=contractorDisplayName(contractorInfo);
+  document.getElementById("headerTitleText").textContent="📄 "+displayName;
+  document.title=displayName;
 }
 window.onload=()=>{applyContractorInfoToHeader();resetChat();};
 </script>
