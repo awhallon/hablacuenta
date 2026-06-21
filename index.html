@@ -327,13 +327,71 @@ function handleNewClientInput(text){
 
   if(s==="name"){
     newClientState.data.name=isSkip?"":text.trim();
-    newClientState.step="address";
-    addAIMsg(t("¿Cuál es la dirección del cliente? (Puedes omitir esto por ahora.)","What is the client's address? (You can skip this for now.)"));
+    newClientState.step="addr_street";
+    newClientState.data.addr={};
+    addAIMsg(t("¿Cuál es la dirección de la calle del cliente? (Puedes omitir todo esto.)","What is the client's street address? (You can skip this entirely.)"));
     showSkipChip();
     return true;
   }
-  if(s==="address"){
-    newClientState.data.address=isSkip?"":text.trim();
+  if(s==="addr_street"){
+    if(isSkip){
+      newClientState.data.address="";
+      newClientState.step="email";
+      addAIMsg(t("¿Cuál es el email del cliente? (Puedes omitir esto por ahora.)","What is the client's email? (You can skip this for now.)"));
+      showSkipChip();
+      return true;
+    }
+    newClientState.data.addr.street=text.trim();
+    newClientState.step="addr_unit_yn";
+    addAIMsg(t("¿Hay número o letra de apartamento/suite/unidad? Si sí, escríbelo directamente. Si no, escribe No.","Is there a suite, unit, or apartment number? If yes, type it. If no, type No."));
+    showYesNoChips();
+    return true;
+  }
+  if(s==="addr_unit_yn"){
+    const isNo=lower==="no"||lower==="nope"||lower==="none"||lower==="n";
+    const isYes=lower==="yes"||lower==="sí"||lower==="si"||lower==="y";
+    const isDirectUnit=!isNo&&!isYes&&!isSkip&&text.trim().length>0&&text.trim().length<12;
+    if(isSkip||isNo){
+      newClientState.data.addr.unit="";
+      newClientState.step="addr_city";
+      addAIMsg(t("¿Cuál es la ciudad?","What city?"));
+    } else if(isDirectUnit){
+      newClientState.data.addr.unit=text.trim();
+      newClientState.step="addr_city";
+      addAIMsg(t("¿Cuál es la ciudad?","What city?"));
+    } else if(isYes){
+      newClientState.step="addr_unit_number";
+      addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the suite/unit number or letter?"));
+    } else {
+      newClientState.step="addr_unit_number";
+      addAIMsg(t("¿Cuál es el número o letra de la unidad?","What is the suite/unit number or letter?"));
+    }
+    return true;
+  }
+  if(s==="addr_unit_number"){
+    newClientState.data.addr.unit=isSkip?"":text.trim();
+    newClientState.step="addr_city";
+    addAIMsg(t("¿Cuál es la ciudad?","What city?"));
+    return true;
+  }
+  if(s==="addr_city"){
+    newClientState.data.addr.city=isSkip?"":text.trim();
+    newClientState.step="addr_state";
+    addAIMsg(t("¿Cuál es el estado?","What state?"));
+    return true;
+  }
+  if(s==="addr_state"){
+    newClientState.data.addr.state=isSkip?"":text.trim();
+    newClientState.step="addr_zip";
+    addAIMsg(t("¿Cuál es el código postal?","What zip code?"));
+    return true;
+  }
+  if(s==="addr_zip"){
+    newClientState.data.addr.zip=isSkip?"":text.trim();
+    const a=newClientState.data.addr;
+    const unitPart=(a.unit&&a.unit.trim())?` Unit ${a.unit.trim()}`:"";
+    const cityStateZip=[a.city,a.state,a.zip].filter(Boolean).join(a.state||a.zip?" ":", ");
+    newClientState.data.address=[`${(a.street||"").trim()}${unitPart}`,cityStateZip].filter(Boolean).join(", ");
     newClientState.step="email";
     addAIMsg(t("¿Cuál es el email del cliente? (Puedes omitir esto por ahora.)","What is the client's email? (You can skip this for now.)"));
     showSkipChip();
