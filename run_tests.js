@@ -1011,67 +1011,39 @@ async function testCombinedLaborMaterialsInvoice() {
 }
 
 async function testPhotoOrientationCorrection() {
-  console.log("\n=== TEST SUITE 18: Photo Orientation Correction (regression for Adrian's reported bug) ===");
+  console.log("\n=== TEST SUITE 18: Photo Orientation Re-encoding (regression for Adrian's reported double-rotation bug) ===");
   const dom = freshDom();
   const win = dom.window;
   await wait(300);
 
-  // getExifOrientation should return 1 (normal) for non-JPEG data, never throw
-  const pngBuffer = win.eval(`
-    (function(){
-      const arr = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0, 0, 0, 0]); // PNG magic bytes, not JPEG
-      return getExifOrientation(arr.buffer);
-    })()
-  `);
-  check("getExifOrientation returns 1 (normal) for non-JPEG data without throwing", pngBuffer === 1);
+  // reencodePhotoForConsistentOrientation should resolve with SOME dataUrl for a normal load,
+  // and critically must NOT apply any manual ctx.transform() rotation of its own — that was
+  // the actual bug: the browser already EXIF-corrects images on decode, and our own additional
+  // manual rotation on top of that double-rotated the result.
+  const fnSource = win.eval('reencodePhotoForConsistentOrientation.toString()');
+  check("reencodePhotoForConsistentOrientation does NOT call ctx.transform (no manual rotation)",
+    !fnSource.includes("ctx.transform"), "if this fails, manual rotation was reintroduced — the exact double-rotation bug");
+  check("reencodePhotoForConsistentOrientation does NOT reference EXIF orientation values 2-8",
+    !/case\s*[2-8]\s*:/.test(fnSource));
+  check("reencodePhotoForConsistentOrientation draws the image via ctx.drawImage", fnSource.includes("drawImage"));
+  check("reencodePhotoForConsistentOrientation re-exports via canvas.toDataURL (strips EXIF, bakes in browser's correction)",
+    fnSource.includes("toDataURL"));
+  check("reencodePhotoForConsistentOrientation falls back to the original photo on error (onerror handler)",
+    fnSource.includes("onerror"));
 
-  // A JPEG with no EXIF APP1 segment at all should also return 1 safely
-  const bareJpeg = win.eval(`
-    (function(){
-      // Minimal JPEG SOI marker followed immediately by EOI, no EXIF segment
-      const arr = new Uint8Array([0xFF, 0xD8, 0xFF, 0xD9]);
-      return getExifOrientation(arr.buffer);
-    })()
-  `);
-  check("getExifOrientation returns 1 for a JPEG with no EXIF segment (and does not crash)", bareJpeg === 1);
+  // Confirm getExifOrientation and correctImageOrientation no longer exist —
+  // they were the source of the double-rotation bug and should be fully removed, not just unused.
+  const oldFnsRemoved = win.eval(`typeof getExifOrientation === "undefined" && typeof correctImageOrientation === "undefined"`);
+  check("The old manual EXIF-rotation functions have been fully removed, not left as dead code", oldFnsRemoved);
 
-  // Truncated/corrupted JPEG data should never throw, just fall back to 1
-  const truncatedCases = [
-    [0xFF, 0xD8], // SOI only, nothing else
-    [0xFF, 0xD8, 0xFF], // dangling marker byte
-    [0xFF, 0xD8, 0xFF, 0xE1], // APP1 marker with no length/payload at all
-    [], // completely empty
-  ];
-  truncatedCases.forEach((bytes, idx) => {
-    const result = win.eval(`
-      (function(){
-        try {
-          const arr = new Uint8Array([${bytes.join(",")}]);
-          return getExifOrientation(arr.buffer);
-        } catch(e) {
-          return "THREW: " + e.message;
-        }
-      })()
-    `);
-    check(`Truncated JPEG case ${idx} (${bytes.length} bytes) does not crash`, result === 1, `got: ${result}`);
-  });
-
-  // correctImageOrientation should resolve immediately with the original dataUrl when orientation is 1 (no-op case)
-  const noOpResult = win.eval(`
-    (async () => {
-      const result = await correctImageOrientation("data:image/jpeg;base64,FAKE", 1);
-      return result;
-    })()
-  `);
-  const resolved = await noOpResult;
-  check("correctImageOrientation is a no-op when orientation is 1 (normal)", resolved === "data:image/jpeg;base64,FAKE");
-
-  // Verify handlePhoto is wired to call EXIF correction (checking the function source references it)
+  // Verify handlePhoto calls the new re-encode function and has a safe fallback
   const handlePhotoSource = win.eval('handlePhoto.toString()');
-  check("handlePhoto calls getExifOrientation before storing the photo", handlePhotoSource.includes("getExifOrientation"));
-  check("handlePhoto calls correctImageOrientation before storing the photo", handlePhotoSource.includes("correctImageOrientation"));
-  check("handlePhoto has a fallback (try/catch) so a failed correction doesn't block adding the photo",
+  check("handlePhoto calls reencodePhotoForConsistentOrientation before storing the photo",
+    handlePhotoSource.includes("reencodePhotoForConsistentOrientation"));
+  check("handlePhoto has a fallback (try/catch) so a failed re-encode doesn't block adding the photo",
     handlePhotoSource.includes("catch"));
+  check("handlePhoto no longer references the removed manual EXIF functions",
+    !handlePhotoSource.includes("getExifOrientation") && !handlePhotoSource.includes("correctImageOrientation"));
 }
 
 async function testGenericModeJobAddressPersistence() {
