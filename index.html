@@ -278,6 +278,137 @@ function startNewAddress(){
   document.getElementById("chipArea").innerHTML="";
 }
 
+let newClientState=null; // tracks guided new-client entry flow
+
+function startNewClient(){
+  newClientState={step:"name",data:{}};
+  addAIMsg(t("¿Cuál es el nombre del cliente?","What is the client's name?"));
+  document.getElementById("chipArea").innerHTML="";
+}
+
+function showSkipChip(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const chip=document.createElement("div");chip.className="chip";chip.textContent=t("Omitir","Skip");
+  chip.onclick=()=>{document.getElementById("userInput").value=t("Omitir","Skip");sendMsg();};
+  area.appendChild(chip);
+}
+
+function showNewClientSummaryChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const chip1=document.createElement("div");chip1.className="chip new";chip1.textContent=t("✅ Todo correcto","✅ Looks good");
+  chip1.onclick=()=>{document.getElementById("userInput").value=t("Todo correcto","Looks good");sendMsg();};
+  const chip2=document.createElement("div");chip2.className="chip warn";chip2.textContent=t("✏️ Corregir algo","✏️ Fix something");
+  chip2.onclick=()=>{document.getElementById("userInput").value=t("Corregir algo","Fix something");sendMsg();};
+  area.appendChild(chip1);area.appendChild(chip2);
+}
+
+function showNewClientFieldChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  [["name",t("Nombre","Name")],["address",t("Dirección","Address")],["email","Email"],["phone",t("Teléfono","Phone")]].forEach(([key,label])=>{
+    const chip=document.createElement("div");chip.className="chip";chip.textContent=label;
+    chip.onclick=()=>{document.getElementById("userInput").value=label;sendMsg();};
+    area.appendChild(chip);
+  });
+}
+
+function newClientSummaryText(){
+  const d=newClientState.data;
+  return t(
+    `Esto es lo que tengo:\n\nNombre: ${d.name||"(en blanco — puedes agregarlo después)"}\nDirección: ${d.address||"(en blanco)"}\nEmail: ${d.email||"(en blanco)"}\nTeléfono: ${d.phone||"(en blanco)"}\n\n¿Está todo correcto, o quieres corregir algo?`,
+    `Here's what I have:\n\nName: ${d.name||"(blank — you can add this later)"}\nAddress: ${d.address||"(blank)"}\nEmail: ${d.email||"(blank)"}\nPhone: ${d.phone||"(blank)"}\n\nDoes everything look correct, or do you want to fix something?`
+  );
+}
+
+function handleNewClientInput(text){
+  if(!newClientState) return false;
+  const s=newClientState.step;
+  const lower=text.toLowerCase().trim();
+  const isSkip=lower==="omitir"||lower==="skip";
+
+  if(s==="name"){
+    newClientState.data.name=isSkip?"":text.trim();
+    newClientState.step="address";
+    addAIMsg(t("¿Cuál es la dirección del cliente? (Puedes omitir esto por ahora.)","What is the client's address? (You can skip this for now.)"));
+    showSkipChip();
+    return true;
+  }
+  if(s==="address"){
+    newClientState.data.address=isSkip?"":text.trim();
+    newClientState.step="email";
+    addAIMsg(t("¿Cuál es el email del cliente? (Puedes omitir esto por ahora.)","What is the client's email? (You can skip this for now.)"));
+    showSkipChip();
+    return true;
+  }
+  if(s==="email"){
+    newClientState.data.email=isSkip?"":text.trim();
+    newClientState.step="phone";
+    addAIMsg(t("¿Cuál es el teléfono del cliente? (Puedes omitir esto por ahora.)","What is the client's phone number? (You can skip this for now.)"));
+    showSkipChip();
+    return true;
+  }
+  if(s==="phone"){
+    newClientState.data.phone=isSkip?"":text.trim();
+    newClientState.step="summary";
+    addAIMsg(newClientSummaryText());
+    showNewClientSummaryChips();
+    return true;
+  }
+  if(s==="summary"){
+    const wantsFix=lower.includes("fix")||lower.includes("corregir")||lower.includes("correct something")||lower==="no";
+    if(wantsFix){
+      newClientState.step="edit_field";
+      addAIMsg(t("¿Qué campo quieres corregir?","Which field do you want to fix?"));
+      showNewClientFieldChips();
+      return true;
+    }
+    // Save the client (even with blank fields — name is the only thing we require for a usable record)
+    const d=newClientState.data;
+    if(!d.name){
+      // Without even a name, fall back to a placeholder so the record is still usable/findable
+      d.name=t("Cliente sin nombre","Unnamed client");
+    }
+    addClient({name:d.name,address:d.address||"",email:d.email||"",phone:d.phone||""});
+    newClientState=null;
+    addAIMsg(t(`Cliente guardado: ${d.name}. Puedes editar esta información más tarde en la pestaña "Clientes".`,`Client saved: ${d.name}. You can edit this info later from the "Clients" tab.`));
+    lastUserText=d.name;
+    addUserMsg(d.name);
+    callClaude(d.name,false);
+    return true;
+  }
+  if(s==="edit_field"){
+    const fieldMap={
+      [t("nombre","name")]:"name",[t("dirección","address")]:"address","email":"email",[t("teléfono","phone")]:"phone"
+    };
+    const key=fieldMap[lower]||(lower.includes("name")||lower.includes("nombre")?"name":
+      lower.includes("address")||lower.includes("dirección")?"address":
+      lower.includes("email")?"email":
+      lower.includes("phone")||lower.includes("teléfono")?"phone":null);
+    if(key){
+      newClientState.step="editing_"+key;
+      const prompts={
+        name:t("¿Cuál es el nombre correcto?","What's the correct name?"),
+        address:t("¿Cuál es la dirección correcta?","What's the correct address?"),
+        email:t("¿Cuál es el email correcto?","What's the correct email?"),
+        phone:t("¿Cuál es el teléfono correcto?","What's the correct phone?")
+      };
+      addAIMsg(prompts[key]);
+      return true;
+    }
+    addAIMsg(t("No reconocí ese campo. Intenta de nuevo.","I didn't recognize that field. Please try again."));
+    showNewClientFieldChips();
+    return true;
+  }
+  if(s.startsWith("editing_")){
+    const key=s.replace("editing_","");
+    newClientState.data[key]=text.trim();
+    newClientState.step="summary";
+    addAIMsg(newClientSummaryText());
+    showNewClientSummaryChips();
+    return true;
+  }
+  return false;
+}
+
 function handleNewAddressInput(text){
   if(!newAddrState) return false;
   const s = newAddrState.step;
@@ -478,7 +609,7 @@ function getSystemPrompt(){
   const isGeneric=contractorInfo.mode==="generic";
 
   const clientSection=isGeneric
-    ? `CLIENTS — Saved clients:\n${clientList}\nIf new client: collect name, address, email, phone.`
+    ? `CLIENTS — Saved clients:\n${clientList}\nIf the user picks "New client", the app will guide them through entering the client's details step by step — you do NOT need to ask for name/address/email/phone yourself. Just wait for the app to hand control back to you with the client's name.\nClient info can be edited anytime from the "Clients" tab at the top of the app.`
     : `TYPE 1 — BPLW Management, PO Box 9395, Long Beach CA 90810
 - Andrew Whallon | andywhallon@yahoo.com | 562-882-8632
 - Richard Baisz | baisz@sbcglobal.net | 310-809-3856
@@ -487,11 +618,12 @@ function getSystemPrompt(){
 
 TYPE 2 — Saved external clients:
 ${clientList}
-If new client: collect name, address, email, phone.`;
+If the user picks "New client", the app will guide them through entering the client's details step by step — you do NOT need to ask for name/address/email/phone yourself. Just wait for the app to hand control back to you with the client's name.
+Client info can be edited anytime from the "Clients" tab at the top of the app.`;
 
   const flowStep1=isGeneric
     ? (savedClients.length
-        ? `1. Who is this invoice for? The app will show saved client buttons, or the user can add a new client.`
+        ? `1. Ask "Who is this invoice for?" The app will show saved client buttons, or a button to add a new client. Mention that existing client info can be edited anytime from the "Clients" tab at the top.`
         : `1. Tell the user there are no saved clients yet and you'll help them add one. Ask "Who is this invoice for?" The app will show a button to add a new client.`)
     : `1. BPLW Management or different client?
 2. Which partner ordered? You may list the partner names for clarity.`;
@@ -663,7 +795,7 @@ function continueIncomplete(i){
 }
 
 function resetChat(){
-  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;showBackBtn(false);
+  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;newClientState=null;showBackBtn(false);
   document.getElementById("chatBox").innerHTML="";
   document.getElementById("chipArea").innerHTML="";
   document.getElementById("invoiceArea").innerHTML="";
@@ -732,7 +864,7 @@ function showSavedClientChips(){
     area.appendChild(chip);
   });
   const nc=document.createElement("div");nc.className="chip new";nc.textContent=t("+ Nuevo cliente","+ New client");
-  nc.onclick=()=>{document.getElementById("userInput").value=t("Nuevo cliente","New client");sendMsg();};
+  nc.onclick=()=>{startNewClient();};
   area.appendChild(nc);
 }
 function showAddressChips(){
@@ -1133,6 +1265,12 @@ function sendMsg(){
   if(newAddrState){
     addUserMsg(text);inp.value="";
     handleNewAddressInput(text);
+    return;
+  }
+  // Handle new client flow
+  if(newClientState){
+    addUserMsg(text);inp.value="";
+    handleNewClientInput(text);
     return;
   }
   addUserMsg(text);inp.value="";callClaude(text,false);
