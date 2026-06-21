@@ -692,7 +692,14 @@ ${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase 
    After step d, say exactly "Got it. Want to add a photo of this receipt?" The app will show photo buttons — wait for the user's response before continuing.
    After the photo step, ask "Any other receipts to add right now?" If yes, repeat steps a-d and the photo step for the next receipt. If no, say "Okay, that's it for now. If you think of more receipts later, you can save this invoice on the next screen and come back to add them." then continue to the next step. Each detail goes into its own field (vendor, desc, date, amount) — never combine them into one string.`:""}
 ${invoiceType==="both"?"7":"6"}. ${invoiceType==="materials"?`What date should go on this invoice? (e.g. today's date, or the date of the last receipt)`:`Date work was completed?`} If the user's answer doesn't include a year, ask "Got it — and was that this year (${new Date().getFullYear()}), or a different year?" before moving on. Only proceed once the date includes a full year.
-${invoiceType==="both"?"8":"7"}. Confirm all details. Show the full built address. ${invoiceType!=="labor"?`After the summary, remind the user: "Remember, you can save this invoice and add more receipts later if you need to." `:""}If anything needs correction, say "Please tell me what to fix."
+${invoiceType==="both"?"8":"7"}. Confirm all details using exactly this layout, one field per line, never skipping or relabeling a field:
+Client: [bill-to name]
+Client Address: [bill-to address]
+Client Email: [bill-to email]
+Client Phone: [bill-to phone]
+Job Address: [full job address]
+${invoiceType!=="materials"?`Work Performed: [list each task and price]\n`:""}${invoiceType!=="labor"?`Materials Purchased: [list each receipt: vendor, item, date, amount]\n`:""}Date: [invoice date]
+Do not combine or substitute fields — Client Address must be the client's billing address, never their email or phone. ${invoiceType!=="labor"?`After the summary, remind the user: "Remember, you can save this invoice and add more receipts later if you need to." `:""}Then ask "Does everything look correct, or do you want to fix something?"
 
 CORRECTION HANDLING: If user says something needs fixing, list the collected fields as a numbered menu and ask which to change. Then:
 - If they pick Client, Ordered by, Street, Unit, or Date: ask only that specific question again
@@ -1637,6 +1644,9 @@ function showFormattedSummary(rawReply){
     .replace(/\s*---\s*/g, '')
     .replace(/Is everything correct.*$/i, '\n\nIs everything correct?')
     .replace(/Todo correcto.*$/i, '\n\n¿Todo correcto?');
+  // Reformat any raw phone numbers the AI wrote out as-is (e.g. after a "Phone:" label),
+  // since the AI's free-text summary bypasses the structured invoiceData formatting entirely.
+  formatted = formatted.replace(/(Phone|Teléfono):\s*([\d\s().+-]{7,})/gi, (match, label, num) => `${label}: ${formatPhone(num.trim())}`);
   d.textContent = formatted;
   box.appendChild(d);
   box.scrollTop = box.scrollHeight;
