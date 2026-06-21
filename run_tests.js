@@ -296,7 +296,7 @@ async function testNewClientFlow() {
 
   // Provide a name
   win.eval(`document.getElementById("userInput").value = "Maria Lopez"; sendMsg();`);
-  check("After name, step advances to address", win.eval('newClientState.step') === "address");
+  check("After name, step advances to addr_street", win.eval('newClientState.step') === "addr_street");
   check("Name was stored correctly", win.eval('newClientState.data.name') === "Maria Lopez");
 
   // Skip address
@@ -351,6 +351,67 @@ async function testNewClientFlow() {
   const savedClients2 = JSON.parse(win2.eval('JSON.stringify(savedClients)'));
   const saved2 = savedClients2.find(c => c.name === "Corrected Name");
   check("Corrected name was the one actually saved (not the original typo)", !!saved2);
+
+  // Test the full structured address sub-flow with a unit number
+  const dom4 = freshDom();
+  const win4 = dom4.window;
+  await wait(300);
+  win4.eval('startNewClient()');
+  win4.eval(`document.getElementById("userInput").value = "Sam Rivera"; sendMsg();`);
+  check("Name step advances to addr_street", win4.eval('newClientState.step') === "addr_street");
+
+  win4.eval(`document.getElementById("userInput").value = "1234 Ocean Blvd"; sendMsg();`);
+  check("Street step advances to addr_unit_yn", win4.eval('newClientState.step') === "addr_unit_yn");
+  check("Street stored correctly", win4.eval('newClientState.data.addr.street') === "1234 Ocean Blvd");
+
+  win4.eval(`document.getElementById("userInput").value = "Yes"; sendMsg();`);
+  check("Saying Yes to unit moves to addr_unit_number", win4.eval('newClientState.step') === "addr_unit_number");
+
+  win4.eval(`document.getElementById("userInput").value = "Suite 200"; sendMsg();`);
+  check("Unit number step advances to addr_city", win4.eval('newClientState.step') === "addr_city");
+  check("Unit stored correctly", win4.eval('newClientState.data.addr.unit') === "Suite 200");
+
+  win4.eval(`document.getElementById("userInput").value = "Long Beach"; sendMsg();`);
+  check("City step advances to addr_state", win4.eval('newClientState.step') === "addr_state");
+
+  win4.eval(`document.getElementById("userInput").value = "CA"; sendMsg();`);
+  check("State step advances to addr_zip", win4.eval('newClientState.step') === "addr_zip");
+
+  win4.eval(`document.getElementById("userInput").value = "90802"; sendMsg();`);
+  check("Zip step advances to email", win4.eval('newClientState.step') === "email");
+  const builtAddress = win4.eval('newClientState.data.address');
+  check("Built address includes street", builtAddress.includes("1234 Ocean Blvd"));
+  check("Built address includes unit", builtAddress.includes("Suite 200"));
+  check("Built address includes city", builtAddress.includes("Long Beach"));
+  check("Built address includes state", builtAddress.includes("CA"));
+  check("Built address includes zip", builtAddress.includes("90802"));
+
+  // Test the no-unit path (typing "No" instead of a direct unit)
+  const dom5 = freshDom();
+  const win5 = dom5.window;
+  await wait(300);
+  win5.eval('startNewClient()');
+  win5.eval(`document.getElementById("userInput").value = "Jane Doe"; sendMsg();`);
+  win5.eval(`document.getElementById("userInput").value = "500 Main St"; sendMsg();`);
+  win5.eval(`document.getElementById("userInput").value = "No"; sendMsg();`);
+  check("Saying No to unit skips straight to addr_city", win5.eval('newClientState.step') === "addr_city");
+  check("Unit correctly stored as blank when answered No", win5.eval('newClientState.data.addr.unit') === "");
+  win5.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // city
+  win5.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // state
+  win5.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // zip
+  check("After skipping city/state/zip, reaches email step", win5.eval('newClientState.step') === "email");
+  const minimalAddress = win5.eval('newClientState.data.address');
+  check("Minimal address still includes street even with everything else skipped", minimalAddress.includes("500 Main St"));
+
+  // Test that "Skip" at the very first street question bypasses the entire address sub-flow
+  const dom6 = freshDom();
+  const win6 = dom6.window;
+  await wait(300);
+  win6.eval('startNewClient()');
+  win6.eval(`document.getElementById("userInput").value = "Test Person"; sendMsg();`);
+  win6.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`);
+  check("Skipping at addr_street jumps straight to email (bypasses whole address sub-flow)", win6.eval('newClientState.step') === "email");
+  check("Address is blank when skipped at the very first address question", win6.eval('newClientState.data.address') === "");
 
   // Test that resetChat clears any in-progress newClientState
   const dom3 = freshDom();
