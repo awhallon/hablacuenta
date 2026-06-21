@@ -179,6 +179,7 @@ input[type=file]{display:none;}
       </div>
       <div class="btn-row" id="chipArea"></div>
       <button id="backBtn" onclick="goBack()" style="display:none;width:100%;margin-top:8px;padding:9px;border-radius:10px;border:1px solid #E5E7EB;background:transparent;color:#888;cursor:pointer;font-size:13px;">← Back</button>
+      <button id="midSaveBtn" onclick="saveConversationForLater()" style="display:none;width:100%;margin-top:8px;padding:9px;border-radius:10px;border:1px solid #FDE68A;background:#FFFBEB;color:#92400E;cursor:pointer;font-size:13px;">💾 Save and finish later</button>
     </div>
     <div id="photoSections" style="display:none;">
       <div class="photo-section">
@@ -298,6 +299,7 @@ function showGenericJobAddressChips(){
     chip.onclick=()=>{
       area.innerHTML="";
       convStage="tasks";
+      showBackBtn(true);showMidSaveBtn(true);
       const fullAddress=addr.full;
       const handoffMsg=`[App note: the job address has already been fully collected as "${fullAddress}" — do NOT ask for it again. Proceed directly to the next step of the invoice.] The job address is ${fullAddress}.`;
       lastUserText=handoffMsg;
@@ -378,6 +380,7 @@ function handleGuidedAddressInput(text){
 function completeGuidedAddress(purpose, meta, fullAddress, parts){
   if(purpose==="job"){
     convStage="tasks";
+    showBackBtn(true);showMidSaveBtn(true);
     if(meta&&meta.clientName){
       const unitPart=(parts.unit&&parts.unit.trim())?` Unit ${parts.unit.trim()}`:"";
       const display=`${(parts.street||"").trim()}${unitPart}`;
@@ -868,15 +871,66 @@ function deleteClient(i){savedClients.splice(i,1);saveClients();renderClientList
 function renderIncompleteList(){
   const el=document.getElementById("incompleteList");
   if(!incompleteInvoices.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">No uncompleted invoices.</div>`;return;}
-  el.innerHTML=incompleteInvoices.map((inv,i)=>`
-    <div class="incomplete-item" onclick="continueIncomplete(${i})">
+  el.innerHTML=incompleteInvoices.map((inv,i)=>{
+    if(inv.kind==="conversation"){
+      const typeLabel=inv.invoiceType==="labor"?"Labor":inv.invoiceType==="materials"?"Materials":"Labor & Materials";
+      return `<div class="incomplete-item" onclick="continueIncomplete(${i})">
+        <div class="incomplete-title">${typeLabel} — In Progress${inv.job_address?" — "+inv.job_address:""}</div>
+        <div class="incomplete-sub">${(inv.messages||[]).length} messages so far · Tap to continue</div>
+      </div>`;
+    }
+    return `<div class="incomplete-item" onclick="continueIncomplete(${i})">
       <div class="incomplete-title">Materials — ${inv.job_address||"Job TBD"}</div>
       <div class="incomplete-sub">${inv.receipts_count||0} receipt(s) · ${inv.date||"Date TBD"} · Tap to continue</div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 function continueIncomplete(i){
   const inv=incompleteInvoices[i];
   hideIncomplete();
+  if(inv.kind==="conversation"){
+    // Restore the raw mid-conversation state and let the AI pick up naturally —
+    // re-render the chat history, then send a quiet handoff so the AI knows to continue.
+    messages=[...inv.messages];
+    convStage=inv.convStage;
+    invoiceType=inv.invoiceType;
+    currentOrderedBy=inv.currentOrderedBy||"";
+    jobPhotos=[...(inv.jobPhotos||[])];
+    receipts=[...(inv.receipts||[])];
+    if(contractorInfo.mode!==inv.contractorMode){
+      // Mode changed since this was saved (e.g. Settings switched) — safest to warn rather than
+      // resume into a flow built for the other mode.
+      document.getElementById("chatBox").innerHTML="";
+      addAIMsg(t(
+        "Esta conversación se guardó con una configuración de facturación diferente y no se puede continuar de forma segura. Por favor comienza una nueva factura.",
+        "This conversation was saved under a different billing setup and can't be safely resumed. Please start a new invoice."
+      ));
+      incompleteInvoices.splice(i,1);saveIncomplete();
+      return;
+    }
+    document.getElementById("chatBox").innerHTML="";
+    messages.forEach(m=>{
+      if(m.role==="user") addUserMsg(m.content);
+      else addAIMsg(m.content);
+    });
+    if(invoiceType!=="labor"){
+      document.getElementById("photoSections").style.display="block";
+      document.getElementById("receiptSection").style.display="block";
+      renderReceipts();
+    }
+    if(jobPhotos.length){
+      document.getElementById("photoSections").style.display="block";
+      renderJobPhotos();
+    }
+    showBackBtn(convStage!=="invoice_type");
+    showMidSaveBtn(["street","unit","tasks","confirm","correction","yesno"].includes(convStage));
+    incompleteInvoices.splice(i,1);saveIncomplete();
+    callClaude(t(
+      "[Nota de la app: el usuario pausó la factura a medias y ahora ha vuelto. Continúa la conversación de forma natural desde donde se quedó — no reinicies ni vuelvas a preguntar nada que ya se haya respondido arriba.] Por favor continúa.",
+      "[App note: the user paused mid-invoice and has now resumed. Continue the conversation naturally from where it left off — do not restart or re-ask anything already answered above.] Please continue."
+    ),false);
+    return;
+  }
   // Restore state and go straight to receipt adding
   invoiceData=inv.invoiceData;
   receipts=inv.receipts||[];
@@ -889,7 +943,7 @@ function continueIncomplete(i){
 }
 
 function resetChat(){
-  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;newClientState=null;guidedAddrState=null;showBackBtn(false);
+  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;newClientState=null;guidedAddrState=null;showBackBtn(false);showMidSaveBtn(false);
   document.getElementById("chatBox").innerHTML="";
   document.getElementById("chipArea").innerHTML="";
   document.getElementById("invoiceArea").innerHTML="";
@@ -970,6 +1024,7 @@ function showAddressChips(){
     chip.onclick=()=>{
       area.innerHTML="";
       convStage="tasks";
+      showBackBtn(true);showMidSaveBtn(true);
       document.getElementById("userInput").value=addr.full;
       sendMsg();
     };
@@ -1132,6 +1187,7 @@ function setChips(stage, extra){
   area.innerHTML = "";
   convStage = stage;
   showBackBtn(stage !== "invoice_type");
+  showMidSaveBtn(["street","unit","tasks","confirm","correction","yesno"].includes(stage));
   if(stage==="invoice_type") showInvoiceTypeChips();
   else if(stage==="client_type") showClientTypeChips();
   else if(stage==="partner") showPartnerChips();
@@ -1421,6 +1477,10 @@ function showBackBtn(show){
   const btn=document.getElementById("backBtn");
   if(btn) btn.style.display=show?"block":"none";
 }
+function showMidSaveBtn(show){
+  const btn=document.getElementById("midSaveBtn");
+  if(btn) btn.style.display=show?"block":"none";
+}
 
 function goBack(){
   if(messages.length < 2) return;
@@ -1657,6 +1717,32 @@ function saveForLater(){
   incompleteInvoices.push(entry);
   saveIncomplete();
   addAIMsg("💾 Saved! Tap 'Uncompleted invoices' at the top to come back and add more receipts.");
+  document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
+}
+
+function saveConversationForLater(){
+  // Captures raw mid-conversation state (no finished invoiceData yet) so the interview itself
+  // can be paused and resumed later, not just a completed invoice waiting for more receipts.
+  const entry={
+    kind:"conversation",
+    messages:[...messages],
+    convStage,
+    invoiceType,
+    currentOrderedBy,
+    contractorMode:contractorInfo.mode,
+    jobPhotos:[...jobPhotos],
+    receipts:[...receipts],
+    job_address:lastStreet||"",
+    saved_at:new Date().toISOString()
+  };
+  incompleteInvoices.push(entry);
+  saveIncomplete();
+  document.getElementById("chipArea").innerHTML="";
+  showBackBtn(false);showMidSaveBtn(false);
+  addAIMsg(t(
+    "💾 ¡Guardado! Toca \"Uncompleted\" arriba para continuar más tarde donde lo dejaste.",
+    "💾 Saved! Tap \"Uncompleted\" at the top to pick up right where you left off."
+  ));
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
 }
 
