@@ -475,6 +475,53 @@ async function testPhoneFormatting() {
   check("Settings contractor phone formatted on save", win3.eval('contractorInfo.phone') === "562-123-4567");
 }
 
+async function testClientHandoffMessage() {
+  console.log("\n=== TEST SUITE 9: New-Client Handoff to AI (regression for re-asking bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval('startNewClient()');
+  win.eval(`document.getElementById("userInput").value = "Andrew Whallon"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "1995 Canal Avenue"; sendMsg();`); // street
+  win.eval(`document.getElementById("userInput").value = "No"; sendMsg();`); // no unit
+  win.eval(`document.getElementById("userInput").value = "Long Beach"; sendMsg();`); // city
+  win.eval(`document.getElementById("userInput").value = "California"; sendMsg();`); // state
+  win.eval(`document.getElementById("userInput").value = "90810"; sendMsg();`); // zip
+  win.eval(`document.getElementById("userInput").value = "andywhallon@yahoo.com"; sendMsg();`); // email
+  win.eval(`document.getElementById("userInput").value = "5628828632"; sendMsg();`); // phone
+  check("Reached summary step with all fields collected", win.eval('newClientState.step') === "summary");
+
+  // Confirm — this triggers the handoff to the AI
+  win.eval(`document.getElementById("userInput").value = "Looks good"; sendMsg();`);
+  await wait(100);
+
+  // Check what was actually pushed into messages[] for the AI to see (ignore network failure in test env)
+  const lastMsg = win.eval('messages[messages.length-1].content');
+  check("Handoff message explicitly tells AI not to re-ask for contact details",
+    lastMsg.includes("do NOT ask for these again"), `actual message: ${lastMsg}`);
+  check("Handoff message confirms client is fully saved",
+    lastMsg.toLowerCase().includes("already been fully saved"));
+  check("Handoff message still identifies the client by name",
+    lastMsg.includes("Andrew Whallon"));
+
+  // Visible chat bubble should stay clean (just the name), even though the AI sees the longer instruction
+  const chatHtml = win.document.getElementById("chatBox").innerHTML;
+  check("Visible chat bubble shows just the client name, not the internal instruction",
+    chatHtml.includes(">Andrew Whallon<") && !chatHtml.includes("App note:"));
+
+  // Confirm the client was actually saved with formatted phone before handoff
+  const clients = JSON.parse(win.eval('JSON.stringify(savedClients)'));
+  const saved = clients.find(c => c.name === "Andrew Whallon");
+  check("Client was saved before handoff occurred", !!saved);
+  check("Saved client phone is formatted", saved && saved.phone === "562-882-8632");
+
+  // Retry path: lastUserText should also carry the full handoff instruction, not just the bare name
+  const retryText = win.eval('lastUserText');
+  check("lastUserText (used on retry) also contains the no-re-ask instruction",
+    retryText.includes("do NOT ask for these again"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -485,6 +532,7 @@ async function testPhoneFormatting() {
     await testBackButtonVisibility();
     await testNewClientFlow();
     await testPhoneFormatting();
+    await testClientHandoffMessage();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
