@@ -98,6 +98,7 @@ input[type=file]{display:none;}
       </div>
       <div class="nav-links">
         <span class="nav-link orange" onclick="showIncomplete()">Uncompleted</span>
+        <span class="nav-link" onclick="showHistory()">History</span>
         <span class="nav-link" onclick="showManager()">Clients</span>
         <span class="nav-link" onclick="showAddressManager()">Addresses</span>
       </div>
@@ -115,6 +116,14 @@ input[type=file]{display:none;}
       <div id="incompleteList"></div>
     </div>
     <button class="back-btn" onclick="hideIncomplete()">← Back</button>
+  </div>
+
+  <div id="historyPanel" style="display:none;">
+    <div class="mgr-panel">
+      <h3>Invoice History</h3>
+      <div id="historyList"></div>
+    </div>
+    <button class="back-btn" onclick="hideHistory()">← Back</button>
   </div>
 
   <div id="addressManagerPanel" style="display:none;">
@@ -359,6 +368,7 @@ let laborNum=parseInt(localStorage.getItem("laborNum")||"10001");
 let matNum=parseInt(localStorage.getItem("matNum")||"20001");
 let savedClients=loadClients();
 let incompleteInvoices=loadIncomplete();
+let invoiceHistory=loadHistory();
 let jobPhotos=[];
 let receipts=[];
 let pendingPhotoChipMsg=null; // tracks in-conversation receipt photo capture
@@ -370,6 +380,28 @@ function loadIncomplete(){try{return JSON.parse(localStorage.getItem("alfonso_in
 function saveIncomplete(){try{localStorage.setItem("alfonso_incomplete",JSON.stringify(incompleteInvoices));}catch(e){}}
 function saveLaborNum(){try{localStorage.setItem("laborNum",String(laborNum));}catch(e){}}
 function saveMatNum(){try{localStorage.setItem("matNum",String(matNum));}catch(e){}}
+function loadHistory(){try{return JSON.parse(localStorage.getItem("alfonso_history")||"[]");}catch(e){return[];}}
+function saveHistory(){try{localStorage.setItem("alfonso_history",JSON.stringify(invoiceHistory));}catch(e){}}
+function recordInvoiceHistory(type,invNum){
+  if(!invoiceData)return;
+  // Avoid duplicate entries if the same invoice is shared/downloaded multiple times
+  const existing=invoiceHistory.find(h=>h.type===type&&h.invNum===invNum);
+  if(existing){
+    existing.invoiceData=JSON.parse(JSON.stringify(invoiceData));
+    existing.receipts=[...receipts];
+    existing.jobPhotos=[...jobPhotos];
+    return;
+  }
+  invoiceHistory.unshift({
+    type,
+    invNum,
+    invoiceData:JSON.parse(JSON.stringify(invoiceData)),
+    receipts:[...receipts],
+    jobPhotos:[...jobPhotos],
+    created_at:new Date().toISOString()
+  });
+  saveHistory();
+}
 
 function t(es,en){return lang==="es"?es:en;}
 
@@ -454,6 +486,43 @@ function showIncomplete(){
 function hideIncomplete(){
   document.getElementById("incompletePanel").style.display="none";
   document.getElementById("mainPanel").style.display="block";
+}
+function showHistory(){
+  document.getElementById("historyPanel").style.display="block";
+  document.getElementById("mainPanel").style.display="none";
+  renderHistoryList();
+}
+function hideHistory(){
+  document.getElementById("historyPanel").style.display="none";
+  document.getElementById("mainPanel").style.display="block";
+}
+function renderHistoryList(){
+  const el=document.getElementById("historyList");
+  if(!invoiceHistory.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">No invoices yet.</div>`;return;}
+  el.innerHTML=invoiceHistory.map((h,i)=>{
+    const d=h.invoiceData;
+    const label=h.type==="labor"?"Labor":"Materials";
+    const dateStr=d.date||"";
+    return `<div class="incomplete-item" onclick="viewHistoryInvoice(${i})">
+      <div class="incomplete-title">#${h.invNum} — ${label} — ${d.job_address||"Job"}</div>
+      <div class="incomplete-sub">${d.ordered_by||""} · ${dateStr} · Tap to view</div>
+    </div>`;
+  }).join("");
+}
+function viewHistoryInvoice(i){
+  const h=invoiceHistory[i];
+  hideHistory();
+  invoiceData=h.invoiceData;
+  receipts=h.receipts||[];
+  jobPhotos=h.jobPhotos||[];
+  invoiceType=h.type;
+  if(h.type==="materials"){
+    document.getElementById("photoSections").style.display="block";
+    document.getElementById("receiptSection").style.display="block";
+    renderReceipts();
+  }
+  showInvoicePreview(invoiceData,h.invNum);
+  addAIMsg(`Viewing invoice #${h.invNum} for ${h.invoiceData.job_address}. You can re-share or re-download the PDF below.`);
 }
 function renderClientList(){
   const el=document.getElementById("clientList");
@@ -958,7 +1027,7 @@ document.getElementById("userInput").addEventListener("keydown",e=>{if(e.key==="
 
 function fmt(n){return"$"+parseFloat(n).toFixed(2);}
 
-function showInvoicePreview(d){
+function showInvoicePreview(d,viewNum){
   const area=document.getElementById("invoiceArea");
   const laborTotal=(d.work_items||[]).reduce((s,i)=>s+parseFloat(i.amount),0);
   const matTotal=(d.materials_items||[]).reduce((s,i)=>s+parseFloat(i.amount),0);
@@ -969,7 +1038,7 @@ function showInvoicePreview(d){
   if(showLabor&&d.work_items&&d.work_items.length>0){
     html+=`<div class="invoice-preview">
       <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Labor <span class="tag labor">Labor</span></h3>
-      <div style="font-size:12px;color:#888;">#${laborNum} &nbsp;·&nbsp; ${d.date}</div>
+      <div style="font-size:12px;color:#888;">#${viewNum||laborNum} &nbsp;·&nbsp; ${d.date}</div>
       <hr class="inv-sep">
       <div class="inv-label">From</div><div>Alfonso Sanchez Property Services<br>310 Main Ave Apt 1, Long Beach CA 90802<br>562-533-7907</div>
       <hr class="inv-sep">
@@ -982,16 +1051,16 @@ function showInvoicePreview(d){
       ${(d.work_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.desc}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
       <hr class="inv-sep">
       <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;"><span>Total Labor</span><span>${fmt(laborTotal)}</span></div>
-      <button class="correct-btn" onclick="showCorrectionMenu('labor')">✏️ Something needs correcting</button>
-      <button class="pdf-btn" onclick="generatePDF('labor')">⬇ Generate Labor PDF</button>
-      <button class="text-btn" onclick="shareInvoicePDF('labor')">📤 Share Invoice</button>
+      ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('labor')">✏️ Something needs correcting</button>`:""}
+      <button class="pdf-btn" onclick="generatePDF('labor',${viewNum||"null"})">⬇ Generate Labor PDF</button>
+      <button class="text-btn" onclick="shareInvoicePDF('labor',${viewNum||"null"})">📤 Share Invoice</button>
     </div>`;
   }
 
   if(showMat){
     html+=`<div class="invoice-preview" style="margin-top:1rem;">
       <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Materials <span class="tag mat">Materials</span></h3>
-      <div style="font-size:12px;color:#888;">#${matNum} &nbsp;·&nbsp; ${d.date}</div>
+      <div style="font-size:12px;color:#888;">#${viewNum||matNum} &nbsp;·&nbsp; ${d.date}</div>
       <hr class="inv-sep">
       <div class="inv-label">From</div><div>Alfonso Sanchez Property Services<br>310 Main Ave Apt 1, Long Beach CA 90802<br>562-533-7907</div>
       <hr class="inv-sep">
@@ -1004,10 +1073,10 @@ function showInvoicePreview(d){
       ${(d.materials_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.vendor?i.vendor+" — ":""}${i.desc}${i.date?" ("+i.date+")":""}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
       <hr class="inv-sep">
       <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;"><span>Total Materials</span><span>${fmt(matTotal)}</span></div>
-      <button class="correct-btn" onclick="showCorrectionMenu('materials')">✏️ Something needs correcting</button>
-      <button class="pdf-btn mat" onclick="generatePDF('materials')">⬇ Generate Materials PDF</button>
-      <button class="text-btn" onclick="shareInvoicePDF('materials')">📤 Share Invoice</button>
-      <button class="save-btn" onclick="saveForLater()">💾 Save — add more receipts later</button>
+      ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('materials')">✏️ Something needs correcting</button>`:""}
+      <button class="pdf-btn mat" onclick="generatePDF('materials',${viewNum||"null"})">⬇ Generate Materials PDF</button>
+      <button class="text-btn" onclick="shareInvoicePDF('materials',${viewNum||"null"})">📤 Share Invoice</button>
+      ${!viewNum?`<button class="save-btn" onclick="saveForLater()">💾 Save — add more receipts later</button>`:""}
     </div>`;
   }
 
@@ -1066,7 +1135,7 @@ function saveForLater(){
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
 }
 
-async function buildPDF(type){
+async function buildPDF(type,forceNum){
   if(!invoiceData)return null;
   const d=invoiceData;
   const doc=new jsPDF({unit:"pt",format:"letter"});
@@ -1083,7 +1152,7 @@ async function buildPDF(type){
   doc.setFontSize(14);doc.setFont("helvetica","bold");
   doc.setTextColor(isLabor?22:133,isLabor?101:56,isLabor?52:11);
   doc.text(isLabor?"LABOR INVOICE":"MATERIALS INVOICE",M+16,y+26);
-  const invNum=isLabor?laborNum:matNum;
+  const invNum=forceNum||(isLabor?laborNum:matNum);
   doc.setFontSize(10);doc.setFont("helvetica","normal");
   doc.text(`Invoice #${invNum}   ·   ${d.date}`,W-M-16,y+26,{align:"right"});
   y+=56;
@@ -1128,30 +1197,32 @@ async function buildPDF(type){
     }
   }
   const fname=isLabor?`Labor_Invoice_${invNum}.pdf`:`Materials_Invoice_${invNum}.pdf`;
-  return {doc,fname,isLabor};
+  return {doc,fname,isLabor,invNum};
 }
 
-async function generatePDF(type){
-  const built=await buildPDF(type);
+async function generatePDF(type,forceNum){
+  const built=await buildPDF(type,forceNum);
   if(!built)return;
-  const {doc,fname,isLabor}=built;
+  const {doc,fname,isLabor,invNum}=built;
   doc.save(fname);
-  if(isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}
+  recordInvoiceHistory(type,invNum);
+  if(!forceNum){if(isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
   addAIMsg(`📄 PDF downloaded: ${fname}. Tap "Share Invoice" to send it directly, or attach it manually from your Downloads.`);
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
 }
 
-async function shareInvoicePDF(type){
-  const built=await buildPDF(type);
+async function shareInvoicePDF(type,forceNum){
+  const built=await buildPDF(type,forceNum);
   if(!built)return;
-  const {doc,fname,isLabor}=built;
+  const {doc,fname,isLabor,invNum}=built;
   const blob=doc.output("blob");
   const file=new File([blob],fname,{type:"application/pdf"});
   const shareText=`${isLabor?"Labor":"Materials"} invoice from Alfonso Sanchez Property Services.`;
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{
       await navigator.share({files:[file],title:fname,text:shareText});
-      if(isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}
+      recordInvoiceHistory(type,invNum);
+      if(!forceNum){if(isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
       addAIMsg("📤 Invoice shared!");
     }catch(e){
       if(e.name!=="AbortError") addAIMsg("Share canceled or unavailable. Tap 'Generate PDF' to download instead.");
@@ -1159,7 +1230,8 @@ async function shareInvoicePDF(type){
   }else{
     // Fallback: browser doesn't support sharing files (e.g. desktop) — fall back to download
     doc.save(fname);
-    if(isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}
+    recordInvoiceHistory(type,invNum);
+    if(!forceNum){if(isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
     addAIMsg(`📄 Your browser doesn't support direct sharing — PDF downloaded instead: ${fname}.`);
   }
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
