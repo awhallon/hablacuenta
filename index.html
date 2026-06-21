@@ -721,7 +721,7 @@ JOB ADDRESS: ${isGeneric?`Ask "What's the job address?" The app will guide the u
 FLOW — ONE question at a time:
 ${flowStep1}
 ${jobAddressStepNum}. ${isGeneric?`Ask for the job address: "What's the job address?" The app will guide the user through entering it step by step.`:`Ask for the job address. Do NOT list addresses or streets in your response — just ask "Which address was the job at?" The app will show address buttons.`}
-${invoiceType!=="materials"?`5. What work did you perform? Ask ONE TASK AT A TIME: "What was the first task and price?" then "Any other tasks? If yes, what and how much?" Repeat until done.`:""}
+${invoiceType!=="materials"?`5. What work did you perform? Ask ONE TASK AT A TIME: "What was the first task and price?" then "Any other tasks? If yes, what and how much?" Repeat until done. Once the user says there are no more tasks, say exactly "Got it. Want to add a photo of the job?" The app will show photo buttons — wait for the user's response before continuing, then proceed to the next step.`:""}
 ${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase materials? Walk through ONE RECEIPT AT A TIME, asking ONE QUESTION AT A TIME — do not combine multiple questions into one message:
    a. "Where did you buy it?" (vendor)
    b. "What did you buy?" (item/description)
@@ -1001,6 +1001,24 @@ function showReceiptPhotoChips(){
   };
   area.appendChild(photoChip);area.appendChild(skipChip);
 }
+function showJobPhotoChips(){
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const photoChip=document.createElement("div");photoChip.className="chip new";
+  photoChip.textContent=t("📷 Tomar foto","📷 Take photo");
+  photoChip.onclick=()=>{
+    area.innerHTML="";
+    pendingPhotoChipMsg="📷 Photo added";
+    triggerPhoto("job");
+  };
+  const skipChip=document.createElement("div");skipChip.className="chip";
+  skipChip.textContent=t("Omitir","Skip");
+  skipChip.onclick=()=>{
+    area.innerHTML="";
+    document.getElementById("userInput").value=t("Omitir foto","Skip photo");
+    sendMsg();
+  };
+  area.appendChild(photoChip);area.appendChild(skipChip);
+}
 function showYesNoChips(){
   const area=document.getElementById("chipArea");area.innerHTML="";
   [t("Sí","Yes"),t("No","No")].forEach(o=>{
@@ -1174,6 +1192,10 @@ function smartChips(reply){
   if(lower.includes("add a photo of this receipt")||lower.includes("agregar una foto de este recibo")){
     showReceiptPhotoChips(); return;
   }
+  // Job photo prompt
+  if(lower.includes("add a photo of the job")||lower.includes("agregar una foto del trabajo")){
+    showJobPhotoChips(); return;
+  }
   // Yes/No
   if(lower.includes("another task")||lower.includes("any other task")||lower.includes("another receipt")||lower.includes("any other receipt")||lower.includes("did you purchase materials")||lower.includes("did you buy materials")||lower.includes("otra tarea")||lower.includes("otro recibo")||lower.includes("compraste materiales")){
     setChips("yesno"); return;
@@ -1314,7 +1336,14 @@ function handlePhoto(type,event){
       // If EXIF reading/correction fails for any reason, fall back to the original photo
       // rather than blocking the user from adding it at all.
     }
-    if(type==="job"){if(jobPhotos.length>=8){alert("Max 8 photos.");return;}jobPhotos.push(dataUrl);renderJobPhotos();}
+    if(type==="job"){
+      if(jobPhotos.length>=8){alert("Max 8 photos.");return;}
+      jobPhotos.push(dataUrl);renderJobPhotos();
+      if(pendingPhotoChipMsg){
+        const msg=pendingPhotoChipMsg;pendingPhotoChipMsg=null;
+        document.getElementById("userInput").value=msg;sendMsg();
+      }
+    }
     else{
       receipts.push({dataUrl});renderReceipts();
       if(pendingPhotoChipMsg){
