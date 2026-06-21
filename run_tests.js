@@ -240,6 +240,49 @@ async function testAlfonsoDeviceUnaffected() {
   check("System prompt does NOT mention generic-only client flow for BPLW mode", !sysPrompt.includes("there are no saved clients yet"));
 }
 
+async function testBackButtonVisibility() {
+  console.log("\n=== TEST SUITE 6: Back Button Visibility (regression for reported bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // BPLW mode: pick Materials Only, should be able to go back
+  win.eval(`
+    invoiceType = "materials";
+    convStage = "client_type";
+    showBackBtn(true);
+    messages.push({role:"user",content:"Materials Only"});
+    messages.push({role:"assistant",content:"Perfect. Which partner ordered the materials?"});
+  `);
+  let backVisible = win.document.getElementById("backBtn").style.display;
+  check("BPLW mode: Back button visible after picking invoice type", backVisible === "block");
+
+  win.eval('goBack()');
+  const stageAfterBack = win.eval('convStage');
+  check("BPLW mode: goBack() reverts to invoice_type stage", stageAfterBack === "invoice_type");
+
+  // Generic mode: configure, then simulate the smartChips trigger for "who is this invoice for"
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval(`
+    contractorInfo.mode = "generic";
+    invoiceType = "materials";
+    messages.push({role:"user",content:"Materials Only"});
+    messages.push({role:"assistant",content:"Hi! Let's create a materials-only invoice. Who is this invoice for?"});
+  `);
+  win2.eval(`smartChips("Hi! Let's create a materials-only invoice. Who is this invoice for?")`);
+  const backVisible2 = win2.document.getElementById("backBtn").style.display;
+  check("Generic mode: Back button visible at client-selection step (the actual reported bug)", backVisible2 === "block");
+
+  const stage2 = win2.eval('convStage');
+  check("Generic mode: convStage correctly set to client_type", stage2 === "client_type");
+
+  win2.eval('goBack()');
+  const stageAfterBack2 = win2.eval('convStage');
+  check("Generic mode: goBack() reverts to invoice_type stage", stageAfterBack2 === "invoice_type");
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -247,6 +290,7 @@ async function testAlfonsoDeviceUnaffected() {
     await testSettingsMigration();
     await testPanelNavigation();
     await testAlfonsoDeviceUnaffected();
+    await testBackButtonVisibility();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
