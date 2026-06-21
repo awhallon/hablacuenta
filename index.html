@@ -248,8 +248,10 @@ function getClientAddressKey(clientName){
 }
 
 function getClientAddresses(clientName){
-  if(clientName==="Andrew Whallon"){
-    // Merge preloaded + any saved additions
+  if(clientName==="Andrew Whallon"&&contractorInfo.mode==="bplw"){
+    // Merge preloaded + any saved additions — only in BPLW mode, since this is Alfonso's
+    // real partner. A generic-mode contractor's own client who happens to share this name
+    // must never see these hardcoded Long Beach properties.
     try{
       const saved=JSON.parse(localStorage.getItem(getClientAddressKey(clientName))||"[]");
       return [...ANDREW_ADDRESSES, ...saved];
@@ -280,6 +282,36 @@ function startGuidedAddress(purpose, meta){
     "We're going to add the address. I'm going to ask you for the following information:\n1. Street address\n2. Unit or suite number, if there is one\n3. City\n4. State\n5. Zip code\n\nWhat is the street address?"
   ));
   document.getElementById("chipArea").innerHTML="";
+}
+
+function showGenericJobAddressChips(){
+  const savedAddrs=currentOrderedBy?getClientAddresses(currentOrderedBy):[];
+  if(!savedAddrs.length){
+    // No addresses saved yet for this client — go straight to the guided entry flow
+    startGuidedAddress("job",{clientName:currentOrderedBy});
+    return;
+  }
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  savedAddrs.forEach(addr=>{
+    const chip=document.createElement("div");chip.className="chip";
+    chip.textContent=addr.display||addr.full;
+    chip.onclick=()=>{
+      area.innerHTML="";
+      convStage="tasks";
+      const fullAddress=addr.full;
+      const handoffMsg=`[App note: the job address has already been fully collected as "${fullAddress}" — do NOT ask for it again. Proceed directly to the next step of the invoice.] The job address is ${fullAddress}.`;
+      lastUserText=handoffMsg;
+      addUserMsg(fullAddress);
+      callClaude(handoffMsg,false);
+    };
+    area.appendChild(chip);
+  });
+  const addChip=document.createElement("div");addChip.className="chip new";
+  addChip.textContent=t("+ Nueva dirección","+ Add new address");
+  addChip.onclick=()=>{
+    startGuidedAddress("job",{clientName:currentOrderedBy});
+  };
+  area.appendChild(addChip);
 }
 
 function handleGuidedAddressInput(text){
@@ -346,7 +378,12 @@ function handleGuidedAddressInput(text){
 function completeGuidedAddress(purpose, meta, fullAddress, parts){
   if(purpose==="job"){
     convStage="tasks";
-    addAIMsg(t(`Dirección guardada: ${fullAddress}.`,`Address saved: ${fullAddress}.`));
+    if(meta&&meta.clientName){
+      const unitPart=(parts.unit&&parts.unit.trim())?` Unit ${parts.unit.trim()}`:"";
+      const display=`${(parts.street||"").trim()}${unitPart}`;
+      saveClientAddress(meta.clientName,{id:"custom_"+Date.now(),display,full:fullAddress});
+    }
+    addAIMsg(t(`Dirección guardada: ${fullAddress}. La recordaré para la próxima vez.`,`Address saved: ${fullAddress}. I'll remember it for next time.`));
     const handoffMsg=`[App note: the job address has already been fully collected as "${fullAddress}" — do NOT ask for it again. Proceed directly to the next step of the invoice.] The job address is ${fullAddress}.`;
     lastUserText=handoffMsg;
     addUserMsg(fullAddress);
@@ -477,6 +514,7 @@ function handleNewClientInput(text){
       d.name=t("Cliente sin nombre","Unnamed client");
     }
     addClient({name:d.name,address:d.address||"",email:d.email||"",phone:d.phone||""});
+    currentOrderedBy=d.name;
     newClientState=null;
     addAIMsg(t(`Cliente guardado: ${d.name}. Puedes editar esta información más tarde en la pestaña "Clientes".`,`Client saved: ${d.name}. You can edit this info later from the "Clients" tab.`));
     const handoffMsg=`[App note: the client "${d.name}" has already been fully saved with their address, email, and phone — do NOT ask for these again. Proceed directly to the next step of the invoice, such as asking for the job address.] The invoice is for ${d.name}.`;
@@ -913,7 +951,7 @@ function showSavedClientChips(){
   const area=document.getElementById("chipArea");area.innerHTML="";
   savedClients.forEach(c=>{
     const chip=document.createElement("div");chip.className="chip";chip.textContent=c.name;
-    chip.onclick=()=>{document.getElementById("userInput").value=c.name;sendMsg();};
+    chip.onclick=()=>{currentOrderedBy=c.name;document.getElementById("userInput").value=c.name;sendMsg();};
     area.appendChild(chip);
   });
   const nc=document.createElement("div");nc.className="chip new";nc.textContent=t("+ Nuevo cliente","+ New client");
@@ -1128,7 +1166,7 @@ function smartChips(reply){
     const idx=lower.indexOf(jobAddrMatch);
     const nearbyText=lower.slice(idx,idx+60);
     if(nearbyText.includes("?")){
-      if(contractorInfo.mode==="generic"){ startGuidedAddress("job"); return; }
+      if(contractorInfo.mode==="generic"){ showGenericJobAddressChips(); return; }
       setChips("street"); return;
     }
   }
