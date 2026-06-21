@@ -1184,6 +1184,80 @@ async function testJobPhotoPromptFlow() {
     sysPrompt.includes("Want to add a photo of the job"));
 }
 
+async function testRetroactiveContractorPhoneFormatting() {
+  console.log("\n=== TEST SUITE 22: Retroactive Contractor Phone Formatting (regression for Adrian's reported bug) ===");
+
+  // freshDom() runs the page's scripts immediately on construction (runScripts: "dangerously"),
+  // so localStorage must be seeded via beforeParse — BEFORE scripts run — not after construction,
+  // or the page will have already read an empty localStorage and baked in the defaults.
+  function domWithPreseededStorage(storageEntries) {
+    function MockJsPDF(opts) { this.opts = opts; }
+    const dom = new JSDOM(html.replace(/<script src="https:\/\/cdnjs[^>]*><\/script>/, ''), {
+      runScripts: "dangerously",
+      resources: "usable",
+      url: "https://hablacuenta.com/",
+      beforeParse(window) {
+        window.jspdf = { jsPDF: MockJsPDF };
+        Object.entries(storageEntries).forEach(([k, v]) => window.localStorage.setItem(k, v));
+      }
+    });
+    dom.window.get = (expr) => dom.window.eval(expr);
+    return dom;
+  }
+
+  // Simulate a device with contractor_info saved BEFORE the formatPhone fix existed —
+  // exactly Adrian's actual situation, with the unformatted number from his real screenshot
+  const dom = domWithPreseededStorage({
+    contractor_info: JSON.stringify({
+      firstName: "Adrian", lastName: "Quintana", businessName: "",
+      address: "1952 Caspian Avenue Long Beach California 90810",
+      phone: "5628675309", // raw, unformatted — as it would have been saved before the fix
+      mode: "generic"
+    })
+  });
+  const win = dom.window;
+  await wait(300);
+
+  const loadedPhone = win.eval('contractorInfo.phone');
+  check("Stale unformatted contractor phone is corrected on load", loadedPhone === "562-867-5309",
+    `got: ${loadedPhone}`);
+
+  // Confirm this shows up correctly in the actual invoice preview, not just in the raw object
+  win.eval(`
+    invoiceType = "both";
+    invoiceData = {
+      done:true, bill_to_name:"Andrew Whallon", bill_to_address:"1995 Canal Avenue", bill_to_email:"andywhallon@yahoo.com", bill_to_phone:"562-882-8632",
+      ordered_by:"", job_address:"1993 Canal Avenue, Long Beach CA 90810",
+      work_items:[{desc:"Install sprinkler system", amount:500}],
+      materials_items:[{vendor:"Home Depot", desc:"PVC pipe", date:"May 5, 2026", amount:50}],
+      date:"June 16, 2026", has_materials:true, has_labor:true, new_client:null
+    };
+    document.getElementById("photoSections").style.display="block";
+    document.getElementById("receiptSection").style.display="block";
+    showInvoicePreview(invoiceData);
+  `);
+  const invoiceArea = win.document.getElementById("invoiceArea").innerHTML;
+  check("Invoice preview's From section shows the corrected contractor phone, not the raw digits",
+    invoiceArea.includes("562-867-5309") && !invoiceArea.includes("562-8675309"));
+
+  // Confirm a fresh device with no saved settings still works normally (default Alfonso data, untouched)
+  const domFresh = freshDom();
+  const winFresh = domFresh.window;
+  await wait(300);
+  check("Fresh device (no saved contractor_info) is unaffected by this fix", winFresh.eval('contractorInfo.phone') === "562-533-7907");
+
+  // Confirm an already-correctly-formatted phone isn't mangled by being re-processed on every load
+  const domGood = domWithPreseededStorage({
+    contractor_info: JSON.stringify({
+      firstName:"Test", lastName:"", businessName:"", address:"123 Main St", phone:"562-867-5309", mode:"bplw"
+    })
+  });
+  const winGood = domGood.window;
+  await wait(300);
+  check("An already-correctly-formatted contractor phone is not corrupted on reload",
+    winGood.eval('contractorInfo.phone') === "562-867-5309");
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -1207,6 +1281,7 @@ async function testJobPhotoPromptFlow() {
     await testGenericModeJobAddressPersistence();
     await testAndrewWhallonNameCollisionFix();
     await testJobPhotoPromptFlow();
+    await testRetroactiveContractorPhoneFormatting();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
