@@ -137,6 +137,11 @@ input[type=file]{display:none;}
       <input id="setAddress" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
       <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Phone</label>
       <input id="setPhone" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:16px;">
+      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Billing Setup</label>
+      <select id="setMode" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:16px;">
+        <option value="bplw">BPLW Management (partners &amp; shared properties)</option>
+        <option value="generic">My own clients (general contractor)</option>
+      </select>
       <button class="pdf-btn" onclick="saveSettingsForm()">Save</button>
       <div id="settingsSavedMsg" style="display:none;color:#16A34A;font-size:13px;margin-top:10px;text-align:center;">✓ Saved</div>
     </div>
@@ -400,11 +405,11 @@ function saveLaborNum(){try{localStorage.setItem("laborNum",String(laborNum));}c
 function saveMatNum(){try{localStorage.setItem("matNum",String(matNum));}catch(e){}}
 function loadHistory(){try{return JSON.parse(localStorage.getItem("alfonso_history")||"[]");}catch(e){return[];}}
 function saveHistory(){try{localStorage.setItem("alfonso_history",JSON.stringify(invoiceHistory));}catch(e){}}
-const DEFAULT_CONTRACTOR_INFO={name:"Alfonso Sanchez Property Services",address:"310 Main Ave Apt 1, Long Beach CA 90802",phone:"562-533-7907"};
+const DEFAULT_CONTRACTOR_INFO={name:"Alfonso Sanchez Property Services",address:"310 Main Ave Apt 1, Long Beach CA 90802",phone:"562-533-7907",mode:"bplw"};
 function loadContractorInfo(){
   try{
     const saved=JSON.parse(localStorage.getItem("contractor_info"));
-    if(saved&&saved.name)return saved;
+    if(saved&&saved.name)return {mode:"bplw",...saved};
   }catch(e){}
   return {...DEFAULT_CONTRACTOR_INFO};
 }
@@ -443,13 +448,11 @@ function getSystemPrompt(){
     ? "This is a MATERIALS ONLY invoice. Do not ask about labor tasks."
     : "This invoice covers BOTH labor and materials.";
 
-  return `You are a billing assistant for ${contractorInfo.name}. English only. Brief. ONE question at a time.
+  const isGeneric=contractorInfo.mode==="generic";
 
-${invoiceTypeDesc}
-
-CONTRACTOR: ${contractorInfo.name}, ${contractorInfo.address}, Phone: ${contractorInfo.phone}
-
-TYPE 1 — BPLW Management, PO Box 9395, Long Beach CA 90810
+  const clientSection=isGeneric
+    ? `CLIENTS — Saved clients:\n${clientList}\nIf new client: collect name, address, email, phone.`
+    : `TYPE 1 — BPLW Management, PO Box 9395, Long Beach CA 90810
 - Andrew Whallon | andywhallon@yahoo.com | 562-882-8632
 - Richard Baisz | baisz@sbcglobal.net | 310-809-3856
 - Gerry Baisz | gerrybaisz@me.com | 310-963-7322
@@ -457,14 +460,28 @@ TYPE 1 — BPLW Management, PO Box 9395, Long Beach CA 90810
 
 TYPE 2 — Saved external clients:
 ${clientList}
-If new client: collect name, address, email, phone.
+If new client: collect name, address, email, phone.`;
 
-JOB ADDRESS: The app will provide the full job address directly. Use it exactly as provided.
+  const flowStep1=isGeneric
+    ? `1. Who is this invoice for? The app will show saved client buttons, or the user can add a new client.`
+    : `1. BPLW Management or different client?
+2. Which partner ordered? You may list the partner names for clarity.`;
+
+  const jobAddressStepNum=isGeneric?"2":"3";
+
+  return `You are a billing assistant for ${contractorInfo.name}. English only. Brief. ONE question at a time.
+
+${invoiceTypeDesc}
+
+CONTRACTOR: ${contractorInfo.name}, ${contractorInfo.address}, Phone: ${contractorInfo.phone}
+
+${clientSection}
+
+JOB ADDRESS: ${isGeneric?`Ask "What's the job address?" and accept whatever the user types.`:`The app will provide the full job address directly. Use it exactly as provided.`}
 
 FLOW — ONE question at a time:
-1. BPLW Management or different client?
-2. Which partner ordered? You may list the partner names for clarity.
-3. Ask for the job address. Do NOT list addresses or streets in your response — just ask "Which address was the job at?" The app will show address buttons.
+${flowStep1}
+${jobAddressStepNum}. ${isGeneric?`Ask for the job address: "What's the job address?"`:`Ask for the job address. Do NOT list addresses or streets in your response — just ask "Which address was the job at?" The app will show address buttons.`}
 ${invoiceType!=="materials"?`5. What work did you perform? Ask ONE TASK AT A TIME: "What was the first task and price?" then "Any other tasks? If yes, what and how much?" Repeat until done.`:""}
 ${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase materials? Walk through ONE RECEIPT AT A TIME, asking ONE QUESTION AT A TIME — do not combine multiple questions into one message:
    a. "Where did you buy it?" (vendor)
@@ -483,7 +500,7 @@ CORRECTION HANDLING: If user says something needs fixing, list the collected fie
 - Make only the requested change, keep everything else the same.
 
 When you have EVERYTHING respond ONLY with valid JSON:
-{"done":true,"client_type":"bplw","bill_to_name":"BPLW Management","bill_to_address":"PO Box 9395, Long Beach CA 90810","bill_to_email":"EMAIL","bill_to_phone":"PHONE","ordered_by":"NAME","job_address":"FULL ADDRESS","work_items":[{"desc":"x","amount":0}],"materials_items":[{"vendor":"x","desc":"x","date":"x","amount":0}],"date":"DATE","has_materials":${invoiceType!=="labor"},"has_labor":${invoiceType!=="materials"},"new_client":null}`;
+{"done":true,"client_type":"${isGeneric?"generic":"bplw"}","bill_to_name":"${isGeneric?"CLIENT NAME":"BPLW Management"}","bill_to_address":"${isGeneric?"CLIENT ADDRESS":"PO Box 9395, Long Beach CA 90810"}","bill_to_email":"EMAIL","bill_to_phone":"PHONE","ordered_by":${isGeneric?'""':'"NAME"'},"job_address":"FULL ADDRESS","work_items":[{"desc":"x","amount":0}],"materials_items":[{"vendor":"x","desc":"x","date":"x","amount":0}],"date":"DATE","has_materials":${invoiceType!=="labor"},"has_labor":${invoiceType!=="materials"},"new_client":null}`;
 }
 
 function setLang(l){
@@ -529,6 +546,7 @@ function showSettings(){
   document.getElementById("setName").value=contractorInfo.name;
   document.getElementById("setAddress").value=contractorInfo.address;
   document.getElementById("setPhone").value=contractorInfo.phone;
+  document.getElementById("setMode").value=contractorInfo.mode||"bplw";
   document.getElementById("settingsSavedMsg").style.display="none";
 }
 function hideSettings(){
@@ -539,8 +557,9 @@ function saveSettingsForm(){
   const name=document.getElementById("setName").value.trim();
   const address=document.getElementById("setAddress").value.trim();
   const phone=document.getElementById("setPhone").value.trim();
+  const mode=document.getElementById("setMode").value;
   if(!name){alert("Business name is required.");return;}
-  contractorInfo={name,address,phone};
+  contractorInfo={name,address,phone,mode};
   saveContractorInfo();
   document.getElementById("settingsSavedMsg").style.display="block";
   document.getElementById("headerTitleText").textContent="📄 "+name;
@@ -830,6 +849,10 @@ function smartChips(reply){
   if((lower.includes("bplw management")||lower.includes("bplw")) && (lower.includes("different client")||lower.includes("otro cliente")||lower.includes("or a different"))){
     setChips("client_type"); return;
   }
+  // Generic mode: client selection (no BPLW/partner concept)
+  if(lower.includes("who is this invoice for")||lower.includes("para quién es esta factura")){
+    showSavedClientChips(); return;
+  }
   // Partner
   if(lower.includes("which partner")||lower.includes("andrew whallon")&&lower.includes("richard")){
     setChips("partner"); return;
@@ -1094,7 +1117,7 @@ function showInvoicePreview(d,viewNum){
       <hr class="inv-sep">
       <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
       <hr class="inv-sep">
-      <div><span class="inv-label">Ordered By</span>&nbsp;${d.ordered_by}</div>
+      ${d.ordered_by?`<div><span class="inv-label">Ordered By</span>&nbsp;${d.ordered_by}</div>`:""}
       <div><span class="inv-label">Job Address</span>&nbsp;${d.job_address}</div>
       <hr class="inv-sep">
       <div class="inv-label">Work Performed</div>
@@ -1116,7 +1139,7 @@ function showInvoicePreview(d,viewNum){
       <hr class="inv-sep">
       <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
       <hr class="inv-sep">
-      <div><span class="inv-label">Ordered By</span>&nbsp;${d.ordered_by}</div>
+      ${d.ordered_by?`<div><span class="inv-label">Ordered By</span>&nbsp;${d.ordered_by}</div>`:""}
       <div><span class="inv-label">Job Address</span>&nbsp;${d.job_address}</div>
       <hr class="inv-sep">
       <div class="inv-label">Materials / Reimbursement</div>
@@ -1213,8 +1236,8 @@ async function buildPDF(type,forceNum){
   if(d.bill_to_email){doc.text(d.bill_to_email,M,y);y+=14;}
   if(d.bill_to_phone){doc.text(d.bill_to_phone,M,y);y+=14;}
   y+=8;
-  secLabel("Ordered By / Job Address");
-  doc.setFontSize(10);doc.setFont("helvetica","bold");doc.setTextColor(20);doc.text(d.ordered_by,M,y);y+=14;
+  secLabel(d.ordered_by?"Ordered By / Job Address":"Job Address");
+  if(d.ordered_by){doc.setFontSize(10);doc.setFont("helvetica","bold");doc.setTextColor(20);doc.text(d.ordered_by,M,y);y+=14;}
   doc.setFont("helvetica","normal");doc.setTextColor(60);
   const jobAddrLines=doc.splitTextToSize(d.job_address,cw);doc.text(jobAddrLines,M,y);y+=jobAddrLines.length*14+10;
   secLabel(isLabor?"Work Performed":"Materials / Reimbursement");
