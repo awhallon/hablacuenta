@@ -616,6 +616,9 @@ function loadContractorInfo(){
         saved.businessName="";
         delete saved.name;
       }
+      // Re-apply phone formatting in case this record predates the formatPhone fix
+      // (older saved data was stored before formatting was applied on save).
+      if(saved.phone) saved.phone=formatPhone(saved.phone);
       return {mode:"bplw",...saved};
     }
   }catch(e){}
