@@ -194,7 +194,15 @@ input[type=file]{display:none;}
 </div>
 
 <script>
-const {jsPDF}=window.jspdf;
+window.addEventListener('error', function(e){
+  alert('JS ERROR: '+e.message+' (line '+e.lineno+')');
+});
+let jsPDF;
+try{
+  jsPDF=window.jspdf.jsPDF;
+}catch(e){
+  alert('jsPDF library failed to load: '+e.message);
+}
 
 const BPLW_PARTNERS=[
   {name:"Andrew Whallon",email:"andywhallon@yahoo.com",phone:"562-882-8632"},
