@@ -1,0 +1,24 @@
+{
+  "name": "Alfonso Sanchez Property Services",
+  "short_name": "Hablacuenta",
+  "description": "Invoice Assistant for Alfonso Sanchez Property Services",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F3F4F6",
+  "theme_color": "#1F2937",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
