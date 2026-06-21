@@ -428,9 +428,10 @@ function handleNewClientInput(text){
     addClient({name:d.name,address:d.address||"",email:d.email||"",phone:d.phone||""});
     newClientState=null;
     addAIMsg(t(`Cliente guardado: ${d.name}. Puedes editar esta información más tarde en la pestaña "Clientes".`,`Client saved: ${d.name}. You can edit this info later from the "Clients" tab.`));
-    lastUserText=d.name;
+    const handoffMsg=`[App note: the client "${d.name}" has already been fully saved with their address, email, and phone — do NOT ask for these again. Proceed directly to the next step of the invoice, such as asking for the job address.] The invoice is for ${d.name}.`;
+    lastUserText=handoffMsg;
     addUserMsg(d.name);
-    callClaude(d.name,false);
+    callClaude(handoffMsg,false);
     return true;
   }
   if(s==="edit_field"){
