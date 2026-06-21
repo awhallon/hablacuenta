@@ -995,7 +995,19 @@ async function callClaude(userText,isRetry){
       if(!res.ok){const err=await res.json().catch(()=>({}));if(res.status===429||res.status===529){await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw new Error(err.error?.message||`HTTP ${res.status}`);}
       const data=await res.json();
       removeTyping();
-      const reply=data.content[0].text;
+      let reply=data.content[0].text;
+      // The AI is instructed to ask a year-clarification question when a date is missing a year.
+      // It sometimes states the wrong "current year" despite being given the correct one in its
+      // instructions, so detect this specific pattern and correct it before it enters the
+      // conversation history or gets displayed.
+      const yearClarifyMatch=reply.match(/this year\s*\((\d{4})\)/i)||reply.match(/este año\s*\((\d{4})\)/i);
+      if(yearClarifyMatch){
+        const statedYear=yearClarifyMatch[1];
+        const actualYear=String(new Date().getFullYear());
+        if(statedYear!==actualYear){
+          reply=reply.replace(statedYear,actualYear);
+        }
+      }
       messages.push({role:"assistant",content:reply});
       try{
         const jm=reply.match(/\{[\s\S]*"done"\s*:\s*true[\s\S]*\}/);
