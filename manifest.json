@@ -1,7 +1,7 @@
 {
-  "name": "Alfonso Sanchez Property Services",
+  "name": "Hablacuenta",
   "short_name": "Hablacuenta",
-  "description": "Invoice Assistant for Alfonso Sanchez Property Services",
+  "description": "Create professional invoices just by talking — available in English and Spanish",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F3F4F6",
