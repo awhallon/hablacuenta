@@ -54,14 +54,42 @@ function freshDom() {
 
 function wait(ms) { return new Promise(res => setTimeout(res, ms)); }
 
+// freshDom() runs the page's scripts immediately on construction (runScripts: "dangerously"),
+// so localStorage must be seeded via beforeParse — BEFORE scripts run — not after construction,
+// or the page will have already read an empty localStorage and baked in the defaults.
+function domWithPreseededStorage(storageEntries) {
+  function MockJsPDF(opts) { this.opts = opts; }
+  const dom = new JSDOM(html.replace(/<script src="https:\/\/cdnjs[^>]*><\/script>/, ''), {
+    runScripts: "dangerously",
+    resources: "usable",
+    url: "https://hablacuenta.com/",
+    beforeParse(window) {
+      window.jspdf = { jsPDF: MockJsPDF };
+      const FDBFactory = require("fake-indexeddb/lib/FDBFactory");
+      window.indexedDB = new FDBFactory();
+      Object.entries(storageEntries).forEach(([k, v]) => window.localStorage.setItem(k, v));
+    }
+  });
+  dom.window.get = (expr) => dom.window.eval(expr);
+  return dom;
+}
+
 async function testBPLWFlow() {
-  console.log("\n=== TEST SUITE 1: BPLW Materials Invoice (Alfonso's default flow) ===");
+  console.log("\n=== TEST SUITE 1: BPLW Materials Invoice (Alfonso's flow, explicitly configured) ===");
   const dom = freshDom();
   const win = dom.window;
   await wait(300);
 
-  check("App initializes with BPLW mode by default", win.get("contractorInfo.mode") === "bplw");
-  check("Greeting shows default firstName", win.document.getElementById("chatBox").innerHTML.includes("Alfonso"));
+  // BPLW/Alfonso's setup is no longer the app's default for fresh installs — explicitly
+  // configure it here, the same way a real BPLW contractor would via Settings.
+  win.eval(`
+    contractorInfo = {firstName:"Alfonso", lastName:"Sanchez", businessName:"Alfonso Sanchez Property Services", address:"310 Main Ave Apt 1, Long Beach CA 90802", phone:"562-533-7907", mode:"bplw"};
+    resetChat();
+  `);
+  await wait(100);
+
+  check("Explicitly-configured BPLW mode is active", win.get("contractorInfo.mode") === "bplw");
+  check("Greeting shows Alfonso's firstName", win.document.getElementById("chatBox").innerHTML.includes("Alfonso"));
 
   // Simulate picking Materials Only
   win.eval('invoiceType = "materials"; convStage = "client_type";');
@@ -229,20 +257,27 @@ async function testPanelNavigation() {
   check("Only AddressManager visible after showAddressManager (Manager properly hidden)", managerDisplay === "none" && addrDisplay === "block");
 }
 
-async function testAlfonsoDeviceUnaffected() {
-  console.log("\n=== TEST SUITE 5: Regression Check — Alfonso's Untouched Device ===");
+async function testFreshDeviceDefaultsToGenericOnboarding() {
+  console.log("\n=== TEST SUITE 5: Fresh Device Defaults to Empty Generic Mode + Onboarding (regression for the hardcoded-Alfonso privacy/UX bug) ===");
   const dom = freshDom();
   const win = dom.window;
   await wait(300);
 
-  check("Fresh device defaults to bplw mode", win.eval("contractorInfo.mode") === "bplw");
-  check("Fresh device firstName is Alfonso", win.eval("contractorInfo.firstName") === "Alfonso");
-  check("Fresh device businessName is full company name", win.eval("contractorInfo.businessName") === "Alfonso Sanchez Property Services");
-  check("Fresh device greeting says Hi Alfonso", win.document.getElementById("chatBox").innerHTML.includes("Hi Alfonso!"));
+  check("Fresh device defaults to generic mode, NOT bplw", win.eval("contractorInfo.mode") === "generic");
+  check("Fresh device has NO firstName pre-filled", win.eval("contractorInfo.firstName") === "");
+  check("Fresh device has NO businessName pre-filled (Alfonso's business info must not leak to new installs)",
+    win.eval("contractorInfo.businessName") === "");
+  check("Fresh device has NO address pre-filled", win.eval("contractorInfo.address") === "");
+  check("Fresh device has NO phone pre-filled", win.eval("contractorInfo.phone") === "");
+  check("Fresh device shows the welcome/onboarding message, not the normal invoice-type greeting",
+    win.document.getElementById("chatBox").innerHTML.toLowerCase().includes("welcome"));
+  check("Fresh device does NOT show 'Hi !' or any greeting assuming a name exists",
+    !win.document.getElementById("chatBox").innerHTML.includes("Hi !"));
 
+  // A contractor who explicitly configures BPLW mode (the real Alfonso use case) should still work correctly
   const sysPrompt = win.eval("getSystemPrompt()");
-  check("System prompt mentions BPLW for default mode", sysPrompt.includes("BPLW Management"));
-  check("System prompt does NOT mention generic-only client flow for BPLW mode", !sysPrompt.includes("there are no saved clients yet"));
+  check("Default generic-mode system prompt does NOT mention BPLW Management",
+    !sysPrompt.includes("BPLW Management"));
 }
 
 async function testBackButtonVisibility() {
@@ -604,7 +639,7 @@ async function testGenericJobAddressFlow() {
   const dom3 = freshDom();
   const win3 = dom3.window;
   await wait(300);
-  win3.eval(`currentOrderedBy = "Andrew Whallon";`); // BPLW mode default stays
+  win3.eval(`contractorInfo.mode = "bplw"; currentOrderedBy = "Andrew Whallon";`);
   win3.eval(`smartChips("Which address was the job at?")`);
   check("BPLW mode does NOT trigger the unified guided job-address flow", win3.eval('guidedAddrState') === null);
   const bplwChipArea = win3.document.getElementById("chipArea").innerHTML;
@@ -628,6 +663,7 @@ async function testUnifiedAddressBplwAndContractorPurposes() {
   const dom = freshDom();
   const win = dom.window;
   await wait(300);
+  win.eval(`contractorInfo.mode = "bplw";`);
   win.eval(`startGuidedAddress("bplw", {clientName: "Richard Baisz"})`);
   check("BPLW purpose stored on guidedAddrState", win.eval('guidedAddrState.purpose') === "bplw");
   check("BPLW meta carries the client name", win.eval('guidedAddrState.meta.clientName') === "Richard Baisz");
@@ -1115,6 +1151,7 @@ async function testAndrewWhallonNameCollisionFix() {
   const domBplw = freshDom();
   const winBplw = domBplw.window;
   await wait(300);
+  winBplw.eval(`contractorInfo.mode = "bplw";`);
   const bplwAddrs = JSON.parse(winBplw.eval(`JSON.stringify(getClientAddresses("Andrew Whallon"))`));
   check("BPLW mode: Andrew Whallon still gets the preloaded Long Beach address list", bplwAddrs.length > 0);
 
@@ -1192,26 +1229,6 @@ async function testJobPhotoPromptFlow() {
 async function testRetroactiveContractorPhoneFormatting() {
   console.log("\n=== TEST SUITE 22: Retroactive Contractor Phone Formatting (regression for Adrian's reported bug) ===");
 
-  // freshDom() runs the page's scripts immediately on construction (runScripts: "dangerously"),
-  // so localStorage must be seeded via beforeParse — BEFORE scripts run — not after construction,
-  // or the page will have already read an empty localStorage and baked in the defaults.
-  function domWithPreseededStorage(storageEntries) {
-    function MockJsPDF(opts) { this.opts = opts; }
-    const dom = new JSDOM(html.replace(/<script src="https:\/\/cdnjs[^>]*><\/script>/, ''), {
-      runScripts: "dangerously",
-      resources: "usable",
-      url: "https://hablacuenta.com/",
-      beforeParse(window) {
-        window.jspdf = { jsPDF: MockJsPDF };
-        const FDBFactory = require("fake-indexeddb/lib/FDBFactory");
-        window.indexedDB = new FDBFactory();
-        Object.entries(storageEntries).forEach(([k, v]) => window.localStorage.setItem(k, v));
-      }
-    });
-    dom.window.get = (expr) => dom.window.eval(expr);
-    return dom;
-  }
-
   // Simulate a device with contractor_info saved BEFORE the formatPhone fix existed —
   // exactly Adrian's actual situation, with the unformatted number from his real screenshot
   const dom = domWithPreseededStorage({
@@ -1247,11 +1264,12 @@ async function testRetroactiveContractorPhoneFormatting() {
   check("Invoice preview's From section shows the corrected contractor phone, not the raw digits",
     invoiceArea.includes("562-867-5309") && !invoiceArea.includes("562-8675309"));
 
-  // Confirm a fresh device with no saved settings still works normally (default Alfonso data, untouched)
+  // Confirm a fresh device with no saved settings still works normally (empty phone, no crash)
   const domFresh = freshDom();
   const winFresh = domFresh.window;
   await wait(300);
-  check("Fresh device (no saved contractor_info) is unaffected by this fix", winFresh.eval('contractorInfo.phone') === "562-533-7907");
+  check("Fresh device (no saved contractor_info) has an empty phone and is unaffected by the retroactive-formatting fix",
+    winFresh.eval('contractorInfo.phone') === "");
 
   // Confirm an already-correctly-formatted phone isn't mangled by being re-processed on every load
   const domGood = domWithPreseededStorage({
@@ -1277,6 +1295,7 @@ async function testMidConversationSaveAndResume() {
 
   // Simulate reaching the tasks stage in BPLW mode (after picking an address chip)
   win.eval(`
+    contractorInfo.mode = "bplw";
     invoiceType = "labor";
     messages = [{role:"user",content:"Labor Only"},{role:"assistant",content:"Which partner ordered?"}];
     currentOrderedBy = "Richard Baisz";
@@ -1318,7 +1337,7 @@ async function testMidConversationSaveAndResume() {
   const dom2 = freshDom();
   const win2 = dom2.window;
   await wait(300);
-  win2.eval(`incompleteInvoices = ${JSON.stringify(savedEntries)}; saveIncomplete();`);
+  win2.eval(`contractorInfo.mode = "bplw"; incompleteInvoices = ${JSON.stringify(savedEntries)}; saveIncomplete();`);
   win2.eval(`continueIncomplete(0)`);
   await wait(100);
 
@@ -1696,13 +1715,115 @@ async function testSettingsAddressButtonLabel() {
     btnTextEs.includes("dirección"), `got: "${btnTextEs}"`);
 }
 
+async function testFirstTimeWelcomeAndOnboarding() {
+  console.log("\n=== TEST SUITE 30: First-Time Welcome Message and Onboarding Flow (regression for Adrian's reported hardcoded-Alfonso bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  check("isFirstTimeUser() returns true on a genuinely fresh device", win.eval('isFirstTimeUser()') === true);
+  const chatHtml = win.document.getElementById("chatBox").innerHTML;
+  check("Welcome message explains the app lets you create invoices by talking",
+    chatHtml.toLowerCase().includes("talking") || chatHtml.toLowerCase().includes("just by talking"));
+  check("Welcome message does NOT show the normal 'What type of invoice' greeting yet",
+    !chatHtml.includes("What type of invoice do you need"));
+  check("Welcome message does NOT show invoice-type chips yet (nothing to invoice for until info is set)",
+    win.document.getElementById("chipArea").innerHTML === "" || !win.document.getElementById("chipArea").innerHTML.includes("Labor"));
+
+  const chipHtml = win.document.getElementById("chipArea").innerHTML;
+  check("A 'Get Started' chip is shown to route the user into Settings", chipHtml.toLowerCase().includes("get started"));
+
+  // Clicking Get Started should open Settings
+  win.eval(`document.querySelector('#chipArea .chip').click()`);
+  check("Clicking Get Started opens the Settings panel", win.document.getElementById("settingsPanel").style.display === "block");
+
+  // Filling in info and saving should return to the normal chat flow automatically
+  win.document.getElementById("setFirstName").value = "Maria";
+  win.document.getElementById("setLastName").value = "Lopez";
+  win.eval(`saveSettingsForm()`);
+  await wait(100);
+  check("After first-time setup, Settings panel closes automatically", win.document.getElementById("settingsPanel").style.display !== "block");
+  check("isFirstTimeUser() is now false after saving real info", win.eval('isFirstTimeUser()') === false);
+  const postSetupChatHtml = win.document.getElementById("chatBox").innerHTML;
+  check("After first-time setup, the normal invoice-type greeting now appears",
+    postSetupChatHtml.includes("What type of invoice do you need"));
+  check("Greeting correctly uses the newly-entered name", postSetupChatHtml.includes("Maria"));
+
+  // Confirm new installs default to generic mode (not BPLW), per explicit product decision
+  check("New installs default to generic mode, not BPLW", win.eval('contractorInfo.mode') === "generic");
+
+  // Returning users (info already set) should skip the welcome message entirely on next load
+  const dom2 = domWithPreseededStorage({
+    contractor_info: JSON.stringify({firstName:"Carlos", lastName:"Ruiz", businessName:"", address:"", phone:"", mode:"generic"})
+  });
+  const win2 = dom2.window;
+  await wait(300);
+  check("A returning user with saved info does NOT see the welcome message again",
+    !win2.document.getElementById("chatBox").innerHTML.toLowerCase().includes("welcome"));
+  check("A returning user sees the normal greeting with their name",
+    win2.document.getElementById("chatBox").innerHTML.includes("Carlos"));
+}
+
+async function testDualLanguageToggle() {
+  console.log("\n=== TEST SUITE 31: Dual Language Toggle — Conversation Language vs Invoice Language ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // Both toggles should exist independently in the header
+  check("Conversation language toggle (ES/EN) exists", !!win.document.getElementById("btnES") && !!win.document.getElementById("btnEN"));
+  check("Invoice language toggle (separate ES/EN) exists", !!win.document.getElementById("btnInvES") && !!win.document.getElementById("btnInvEN"));
+  check("The two toggles are genuinely distinct DOM elements, not aliases of each other",
+    win.document.getElementById("btnES") !== win.document.getElementById("btnInvES"));
+
+  // By default, invoiceLang should track lang until explicitly overridden
+  check("Default: invoiceLang matches lang (both English)", win.eval('invoiceLang') === win.eval('lang'));
+  win.eval(`setLang('es')`);
+  check("Switching conversation language to Spanish also moves invoiceLang to Spanish (not yet explicitly split)",
+    win.eval('invoiceLang') === "es");
+
+  // Explicitly setting invoice language should decouple it from future conversation-language changes
+  win.eval(`setInvoiceLang('en')`);
+  check("Explicitly setting invoice language to English while conversation stays Spanish works",
+    win.eval('lang') === "es" && win.eval('invoiceLang') === "en");
+  win.eval(`setLang('en')`);
+  win.eval(`setLang('es')`);
+  check("After explicitly splitting the two, switching conversation language again does NOT drag invoiceLang along with it",
+    win.eval('invoiceLang') === "en");
+
+  // The invoice preview should show a language-mismatch notice when the two differ
+  win.eval(`
+    invoiceType = "labor";
+    invoiceData = {done:true, bill_to_name:"Cliente", bill_to_address:"x", bill_to_email:"x", bill_to_phone:"",
+      ordered_by:"", job_address:"123 Main", work_items:[{desc:"Tarea", amount:50}], materials_items:[], date:"x", has_labor:true};
+    showInvoicePreview(invoiceData);
+  `);
+  const mismatchHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("A language-mismatch notice appears when invoiceLang differs from the conversation language",
+    mismatchHtml.toLowerCase().includes("english") || mismatchHtml.toLowerCase().includes("inglés"));
+
+  // When the two match, no notice should appear
+  win.eval(`setInvoiceLang('es')`);
+  win.eval(`showInvoicePreview(invoiceData)`);
+  const matchHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("No language-mismatch notice appears when invoiceLang matches the conversation language",
+    !matchHtml.toLowerCase().includes("you're viewing this") && !matchHtml.toLowerCase().includes("estás viendo esto"));
+
+  // translateForPDF should use invoiceLang, not the conversation language, as its trigger condition
+  win.eval(`setLang('es'); setInvoiceLang('en');`);
+  win.eval(`invoiceData = {date:"5 de junio de 2026", work_items:[{desc:"Reparar tubería", amount:50}], materials_items:[]};`);
+  const fnSource = win.eval('translateForPDF.toString()');
+  check("translateForPDF's no-op condition compares invoiceLang to lang, not a hardcoded language check",
+    fnSource.includes("invoiceLang===lang"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
     await testGenericMode();
     await testSettingsMigration();
     await testPanelNavigation();
-    await testAlfonsoDeviceUnaffected();
+    await testFreshDeviceDefaultsToGenericOnboarding();
     await testBackButtonVisibility();
     await testNewClientFlow();
     await testPhoneFormatting();
@@ -1727,6 +1848,8 @@ async function testSettingsAddressButtonLabel() {
     await testSpanishTranslationOfDynamicLists();
     await testAiConversationRespondsInSelectedLanguage();
     await testSettingsAddressButtonLabel();
+    await testFirstTimeWelcomeAndOnboarding();
+    await testDualLanguageToggle();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
