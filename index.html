@@ -708,15 +708,15 @@ Client info can be edited anytime from the "Clients" tab at the top of the app.`
 
   const flowStep1=isGeneric
     ? (savedClients.length
-        ? `1. Ask "Who is this invoice for?" The app will show saved client buttons, or a button to add a new client. Mention that existing client info can be edited anytime from the "Clients" tab at the top.`
-        : `1. Tell the user there are no saved clients yet and you'll help them add one. Ask "Who is this invoice for?" The app will show a button to add a new client.`)
-    : `1. BPLW Management or different client?
-2. Which partner ordered? You may list the partner names for clarity.`;
+        ? `1. Ask "${lang==="es"?"¿Para quién es esta factura?":"Who is this invoice for?"}" The app will show saved client buttons, or a button to add a new client. Mention that existing client info can be edited anytime from the "Clients" tab at the top.`
+        : `1. Tell the user there are no saved clients yet and you'll help them add one. Ask "${lang==="es"?"¿Para quién es esta factura?":"Who is this invoice for?"}" The app will show a button to add a new client.`)
+    : `1. ${lang==="es"?"¿BPLW Management o un cliente diferente?":"BPLW Management or different client?"}
+2. ${lang==="es"?"¿Qué socio ordenó el trabajo? Puedes mencionar los nombres de los socios para mayor claridad.":"Which partner ordered? You may list the partner names for clarity."}`;
 
   const jobAddressStepNum=isGeneric?"2":"3";
   const displayName=contractorDisplayName(contractorInfo);
 
-  return `You are a billing assistant for ${displayName}. English only. Brief. ONE question at a time.
+  return `You are a billing assistant for ${displayName}. ${lang==="es"?"Respond ONLY in Spanish.":"Respond ONLY in English."} Brief. ONE question at a time.
 
 ${invoiceTypeDesc}
 
@@ -724,28 +724,33 @@ CONTRACTOR: ${displayName}, ${contractorInfo.address}, Phone: ${contractorInfo.p
 
 ${clientSection}
 
-JOB ADDRESS: ${isGeneric?`Ask "What's the job address?" The app will guide the user through a structured step-by-step entry (street, unit, city, state, zip) — you do NOT need to ask for these pieces yourself. Just wait for the app to hand control back to you with the full address.`:`The app will provide the full job address directly. Use it exactly as provided.`}
+JOB ADDRESS: ${isGeneric?`Ask "${lang==="es"?"¿Cuál es la dirección del trabajo?":"What's the job address?"}" The app will guide the user through a structured step-by-step entry (street, unit, city, state, zip) — you do NOT need to ask for these pieces yourself. Just wait for the app to hand control back to you with the full address.`:`The app will provide the full job address directly. Use it exactly as provided.`}
 
 FLOW — ONE question at a time:
 ${flowStep1}
-${jobAddressStepNum}. ${isGeneric?`Ask for the job address: "What's the job address?" The app will guide the user through entering it step by step.`:`Ask for the job address. Do NOT list addresses or streets in your response — just ask "Which address was the job at?" The app will show address buttons.`}
-${invoiceType!=="materials"?`5. What work did you perform? Ask ONE TASK AT A TIME: "What was the first task and price?" then "Any other tasks? If yes, what and how much?" Repeat until done. Once the user says there are no more tasks, say exactly "Got it. Want to add a photo of the job?" The app will show photo buttons — wait for the user's response before continuing, then proceed to the next step.`:""}
-${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. Did you purchase materials? Walk through ONE RECEIPT AT A TIME, asking ONE QUESTION AT A TIME — do not combine multiple questions into one message:
-   a. "Where did you buy it?" (vendor)
-   b. "What did you buy?" (item/description)
-   c. "What date was it purchased?" (date) — If the user's answer doesn't include a year (e.g. "May 5" or "5/5"), ask "Got it — and was that this year (${new Date().getFullYear()}), or a different year?" before moving on. Only proceed once the date includes a full year.
-   d. "How much did it cost?" (amount)
-   After step d, say exactly "Got it. Want to add a photo of this receipt?" The app will show photo buttons — wait for the user's response before continuing.
-   After the photo step, ask "Any other receipts to add right now?" If yes, repeat steps a-d and the photo step for the next receipt. If no, say "Okay, that's it for now. If you think of more receipts later, you can save this invoice on the next screen and come back to add them." then continue to the next step. Each detail goes into its own field (vendor, desc, date, amount) — never combine them into one string.`:""}
-${invoiceType==="both"?"7":"6"}. ${invoiceType==="materials"?`What date should go on this invoice? (e.g. today's date, or the date of the last receipt)`:`Date work was completed?`} If the user's answer doesn't include a year, ask "Got it — and was that this year (${new Date().getFullYear()}), or a different year?" before moving on. Only proceed once the date includes a full year.
+${jobAddressStepNum}. ${isGeneric?`Ask for the job address: "${lang==="es"?"¿Cuál es la dirección del trabajo?":"What's the job address?"}" The app will guide the user through entering it step by step.`:`Ask for the job address. Do NOT list addresses or streets in your response — just ask "${lang==="es"?"¿En qué dirección fue el trabajo?":"Which address was the job at?"}" The app will show address buttons.`}
+${invoiceType!=="materials"?`5. What work did you perform? Ask ONE TASK AT A TIME, in ${lang==="es"?"Spanish":"English"} (e.g. ${lang==="es"?'"¿Cuál fue la primera tarea y el precio?" luego "¿Alguna otra tarea? Si sí, ¿cuál y cuánto?"':'"What was the first task and price?" then "Any other tasks? If yes, what and how much?"'}). Repeat until done. Once the user says there are no more tasks, say exactly "${lang==="es"?"Listo. ¿Quieres agregar una foto del trabajo?":"Got it. Want to add a photo of the job?"}" The app will show photo buttons — wait for the user's response before continuing, then proceed to the next step.`:""}
+${invoiceType!=="labor"?`${invoiceType==="materials"?"5":"6"}. ${lang==="es"?"¿Compraste materiales?":"Did you purchase materials?"} Walk through ONE RECEIPT AT A TIME, asking ONE QUESTION AT A TIME — do not combine multiple questions into one message, in ${lang==="es"?"Spanish":"English"}:
+   a. "${lang==="es"?"¿Dónde lo compraste?":"Where did you buy it?"}" (vendor)
+   b. "${lang==="es"?"¿Qué compraste?":"What did you buy?"}" (item/description)
+   c. "${lang==="es"?"¿Qué fecha lo compraste?":"What date was it purchased?"}" (date) — If the user's answer doesn't include a year (e.g. "May 5" or "5/5"), ask "${lang==="es"?`Entendido — ¿fue este año (${new Date().getFullYear()}), o un año diferente?`:`Got it — and was that this year (${new Date().getFullYear()}), or a different year?`}" before moving on. Only proceed once the date includes a full year.
+   d. "${lang==="es"?"¿Cuánto costó?":"How much did it cost?"}" (amount)
+   After step d, say exactly "${lang==="es"?"Listo. ¿Quieres agregar una foto de este recibo?":"Got it. Want to add a photo of this receipt?"}" The app will show photo buttons — wait for the user's response before continuing.
+   After the photo step, ask "${lang==="es"?"¿Algún otro recibo para agregar ahora?":"Any other receipts to add right now?"}" If yes, repeat steps a-d and the photo step for the next receipt. If no, say "${lang==="es"?"Está bien, eso es todo por ahora. Si piensas en más recibos después, puedes guardar esta factura en la siguiente pantalla y volver para agregarlos.":"Okay, that's it for now. If you think of more receipts later, you can save this invoice on the next screen and come back to add them."}" then continue to the next step. Each detail goes into its own field (vendor, desc, date, amount) — never combine them into one string.`:""}
+${invoiceType==="both"?"7":"6"}. ${invoiceType==="materials"?(lang==="es"?`¿Qué fecha debe ir en esta factura? (por ejemplo, la fecha de hoy, o la fecha del último recibo)`:`What date should go on this invoice? (e.g. today's date, or the date of the last receipt)`):(lang==="es"?`¿Qué fecha se completó el trabajo?`:`Date work was completed?`)} If the user's answer doesn't include a year, ask "${lang==="es"?`Entendido — ¿fue este año (${new Date().getFullYear()}), o un año diferente?`:`Got it — and was that this year (${new Date().getFullYear()}), or a different year?`}" before moving on. Only proceed once the date includes a full year.
 ${invoiceType==="both"?"8":"7"}. Confirm all details using exactly this layout, one field per line, never skipping or relabeling a field:
-Client: [bill-to name]
+${lang==="es"?`Cliente: [bill-to name]
+Dirección del Cliente: [bill-to address]
+Email del Cliente: [bill-to email]
+Teléfono del Cliente: [bill-to phone]
+Dirección del Trabajo: [full job address]
+${invoiceType!=="materials"?`Trabajo Realizado: [list each task and price]\n`:""}${invoiceType!=="labor"?`Materiales Comprados: [list each receipt: vendor, item, date, amount]\n`:""}Fecha: [invoice date]`:`Client: [bill-to name]
 Client Address: [bill-to address]
 Client Email: [bill-to email]
 Client Phone: [bill-to phone]
 Job Address: [full job address]
-${invoiceType!=="materials"?`Work Performed: [list each task and price]\n`:""}${invoiceType!=="labor"?`Materials Purchased: [list each receipt: vendor, item, date, amount]\n`:""}Date: [invoice date]
-Do not combine or substitute fields — Client Address must be the client's billing address, never their email or phone. ${invoiceType!=="labor"?`After the summary, remind the user: "Remember, you can save this invoice and add more receipts later if you need to." `:""}Then ask "Does everything look correct, or do you want to fix something?"
+${invoiceType!=="materials"?`Work Performed: [list each task and price]\n`:""}${invoiceType!=="labor"?`Materials Purchased: [list each receipt: vendor, item, date, amount]\n`:""}Date: [invoice date]`}
+Do not combine or substitute fields — the Client Address field must be the client's billing address, never their email or phone. ${invoiceType!=="labor"?(lang==="es"?`Después del resumen, recuerda al usuario: "Recuerda, puedes guardar esta factura y agregar más recibos más tarde si lo necesitas." `:`After the summary, remind the user: "Remember, you can save this invoice and add more receipts later if you need to." `):""}Then ask ${lang==="es"?`"¿Todo se ve correcto, o quieres corregir algo?"`:`"Does everything look correct, or do you want to fix something?"`}
 
 CORRECTION HANDLING: If user says something needs fixing, list the collected fields as a numbered menu and ask which to change. Then:
 - If they pick Client, Ordered by, Street, Unit, or Date: ask only that specific question again
@@ -1266,13 +1271,13 @@ function smartChips(reply){
     showSavedClientChips(); return;
   }
   // Partner
-  if(lower.includes("which partner")||lower.includes("andrew whallon")&&lower.includes("richard")){
+  if(lower.includes("which partner")||lower.includes("qué socio")||lower.includes("cuál socio")||(lower.includes("andrew whallon")&&lower.includes("richard"))){
     setChips("partner"); return;
   }
   // Job address / location question — require the question mark to appear shortly after
   // the trigger phrase, so this doesn't re-fire on confirmation statements like "The job
   // address is 1995 Canal Ave. What was the first task?" (which has a '?' but for a different question).
-  const jobAddrPhrases=["which address","which street","what street","street is the job","street was the work","job location","job address","where was the job","location of the job","address was the job","address of the job"];
+  const jobAddrPhrases=["which address","which street","what street","street is the job","street was the work","job location","job address","where was the job","location of the job","address was the job","address of the job","dirección del trabajo","qué dirección fue el trabajo","en qué dirección","dirección de la calle","dirección fue el trabajo"];
   const jobAddrMatch=jobAddrPhrases.find(p=>lower.includes(p));
   if(jobAddrMatch){
     const idx=lower.indexOf(jobAddrMatch);
