@@ -1051,13 +1051,16 @@ function resetChat(){
 }
 
 function showWelcomeMessage(){
+  addAIMsg(
+    "Welcome to Hablacuenta! 👋 The first thing to decide is which language you'd like the app to talk to you in. You can change this anytime using the switch at the top of the screen.\n\n¡Bienvenido a Hablacuenta! 👋 Lo primero es decidir en qué idioma quieres que la aplicación te hable. Puedes cambiarlo en cualquier momento con el interruptor en la parte superior de la pantalla."
+  );
   addAIMsg(t(
-    "¡Bienvenido a Hablacuenta! 👋\n\nEste app te ayuda a crear facturas profesionales con solo hablar — sin formularios complicados. Solo responde las preguntas y la factura se genera automáticamente.\n\nPrimero, necesito conocer tu información de negocio para que aparezca en tus facturas.",
-    "Welcome to Hablacuenta! 👋\n\nThis app helps you create professional invoices just by talking — no complicated forms. Just answer the questions and the invoice gets built automatically.\n\nFirst, I need to get your business information so it can appear on your invoices."
+    "Una vez que hayas elegido, toca \"Continuar\" para configurar la información de tu negocio.\n\nEste app te ayuda a crear facturas profesionales con solo hablar — sin formularios complicados. Solo responde las preguntas y la factura se genera automáticamente.",
+    "Once you've chosen, tap \"Continue\" to set up your business information.\n\nThis app helps you create professional invoices just by talking — no complicated forms. Just answer the questions and the invoice gets built automatically."
   ));
   const area=document.getElementById("chipArea");area.innerHTML="";
   const chip=document.createElement("div");chip.className="chip new";
-  chip.textContent=t("Comenzar →","Get Started →");
+  chip.textContent=t("Continuar →","Continue →");
   chip.onclick=()=>{area.innerHTML="";showSettings();};
   area.appendChild(chip);
 }
