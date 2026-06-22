@@ -23,6 +23,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .lang-toggle{display:flex;border:1px solid #E5E7EB;border-radius:20px;overflow:hidden;}
 .lang-btn{padding:5px 13px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:#888;}
 .lang-btn.active{background:#111;color:#fff;}
+.lang-toggle-group{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}
+.lang-toggle-labeled{display:flex;align-items:center;gap:6px;}
+.lang-toggle-label{font-size:10px;color:#999;white-space:nowrap;}
+.chip.type-labor{border-color:#16A34A;color:#166534;background:#DCFCE7;}
+.chip.type-materials{border-color:#CA8A04;color:#854F0B;background:#FEF9C3;}
+.chip.type-combined{border-color:#7C3AED;color:#5B21B6;background:#F5EEFF;}
 .nav-links{display:flex;gap:12px;}
 .nav-link{font-size:11px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
 .nav-link.orange{color:#D97706;}
@@ -63,6 +69,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tag{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-left:6px;}
 .tag.labor{background:#DCFCE7;color:#166534;}
 .tag.mat{background:#FEF9C3;color:#854F0B;}
+.tag.combined{background:#F5EEFF;color:#5B21B6;}
 .loading-dots{display:inline-flex;gap:4px;align-items:center;padding:4px 0;}
 .loading-dots span{width:7px;height:7px;border-radius:50%;background:#9CA3AF;animation:bounce 1.2s infinite;}
 .loading-dots span:nth-child(2){animation-delay:0.2s;}
@@ -92,9 +99,21 @@ input[type=file]{display:none;}
       <div class="header-sub" id="headerSubText">Invoice Assistant</div>
     </div>
     <div class="header-right">
-      <div class="lang-toggle">
-        <button class="lang-btn" id="btnES" onclick="setLang('es')">ES</button>
-        <button class="lang-btn active" id="btnEN" onclick="setLang('en')">EN</button>
+      <div class="lang-toggle-group">
+        <div class="lang-toggle-labeled">
+          <span class="lang-toggle-label" id="convLangLabel">Talk to me in</span>
+          <div class="lang-toggle">
+            <button class="lang-btn" id="btnES" onclick="setLang('es')">ES</button>
+            <button class="lang-btn active" id="btnEN" onclick="setLang('en')">EN</button>
+          </div>
+        </div>
+        <div class="lang-toggle-labeled">
+          <span class="lang-toggle-label" id="invoiceLangLabel">Invoice in</span>
+          <div class="lang-toggle">
+            <button class="lang-btn" id="btnInvES" onclick="setInvoiceLang('es')">ES</button>
+            <button class="lang-btn active" id="btnInvEN" onclick="setInvoiceLang('en')">EN</button>
+          </div>
+        </div>
       </div>
       <div class="nav-links">
         <span class="nav-link orange" id="navUncompleted" onclick="showIncomplete()">Uncompleted</span>
@@ -598,10 +617,10 @@ function handleNewAddressInput(text){
   return false;
 }
 
-const DEFAULT_CONTRACTOR_INFO={firstName:"Alfonso",lastName:"Sanchez",businessName:"Alfonso Sanchez Property Services",address:"310 Main Ave Apt 1, Long Beach CA 90802",phone:"562-533-7907",mode:"bplw"};
+const DEFAULT_CONTRACTOR_INFO={firstName:"",lastName:"",businessName:"",address:"",phone:"",mode:"generic"};
 function contractorDisplayName(info){
   const full=[info.firstName,info.lastName].filter(Boolean).join(" ").trim();
-  return info.businessName||full||"";
+  return info.businessName||full||t("Hablacuenta","Hablacuenta");
 }
 function loadContractorInfo(){
   try{
@@ -618,14 +637,18 @@ function loadContractorInfo(){
       // Re-apply phone formatting in case this record predates the formatPhone fix
       // (older saved data was stored before formatting was applied on save).
       if(saved.phone) saved.phone=formatPhone(saved.phone);
-      return {mode:"bplw",...saved};
+      return {mode:saved.mode||"generic",...saved};
     }
   }catch(e){}
   return {...DEFAULT_CONTRACTOR_INFO};
 }
 function saveContractorInfo(){try{localStorage.setItem("contractor_info",JSON.stringify(contractorInfo));}catch(e){}}
+function isFirstTimeUser(){
+  return !contractorInfo.firstName && !contractorInfo.lastName && !contractorInfo.businessName;
+}
 
-let lang="en";
+let lang="en"; // conversation language: controls the AI chat and the on-screen invoice preview
+let invoiceLang="en"; // invoice language: controls only the final generated/shared PDF document
 let messages=[];
 let invoiceData=null;
 let lastUserText="";
@@ -767,6 +790,8 @@ When you have EVERYTHING respond ONLY with valid JSON:
 function applyStaticTranslations(){
   const set=(id,es,en)=>{const el=document.getElementById(id);if(el)el.textContent=t(es,en);};
   set("headerSubText","Asistente de Facturas","Invoice Assistant");
+  set("convLangLabel","Háblame en","Talk to me in");
+  set("invoiceLangLabel","Factura en","Invoice in");
   set("navUncompleted","Pendientes","Uncompleted");
   set("navHistory","Historial","History");
   set("navClients","Clientes","Clients");
@@ -801,8 +826,28 @@ function setLang(l){
   document.getElementById("btnES").classList.toggle("active",l==="es");
   document.getElementById("btnEN").classList.toggle("active",l==="en");
   document.getElementById("userInput").placeholder=t("Escribe aquí...","Type here...");
+  // If the user hasn't explicitly chosen a different invoice language, keep it in sync with
+  // the conversation language by default — most people want their invoices in the language
+  // they're speaking, until they deliberately split the two.
+  if(!invoiceLangExplicitlySet){
+    invoiceLang=l;
+    document.getElementById("btnInvES").classList.toggle("active",l==="es");
+    document.getElementById("btnInvEN").classList.toggle("active",l==="en");
+  }
   applyStaticTranslations();
   resetChat();
+}
+
+let invoiceLangExplicitlySet=false;
+function setInvoiceLang(l){
+  invoiceLang=l;
+  invoiceLangExplicitlySet=true;
+  document.getElementById("btnInvES").classList.toggle("active",l==="es");
+  document.getElementById("btnInvEN").classList.toggle("active",l==="en");
+  // Does NOT reset the conversation — this only affects how the final PDF gets translated
+  // when generated. Update the invoice preview (if one is showing) so the language-mismatch
+  // notice reflects the new setting immediately.
+  if(invoiceData) showInvoicePreview(invoiceData);
 }
 
 const ALL_PANEL_IDS=["mainPanel","managerPanel","incompletePanel","historyPanel","settingsPanel","addressManagerPanel"];
@@ -866,13 +911,19 @@ function saveSettingsForm(){
   const address=document.getElementById("setAddress").value.trim();
   const phone=formatPhone(document.getElementById("setPhone").value.trim());
   const mode=document.getElementById("setMode").value;
-  if(!firstName){alert("First name is required.");return;}
+  if(!firstName){alert(t("Se requiere el nombre.","First name is required."));return;}
+  const wasFirstTime=isFirstTimeUser();
   contractorInfo={firstName,lastName,businessName,address,phone,mode};
   saveContractorInfo();
-  document.getElementById("settingsSavedMsg").style.display="block";
   const displayName=contractorDisplayName(contractorInfo);
   document.getElementById("headerTitleText").textContent="📄 "+displayName;
   document.title=displayName;
+  if(wasFirstTime){
+    hideSettings();
+    resetChat();
+    return;
+  }
+  document.getElementById("settingsSavedMsg").style.display="block";
 }
 function renderHistoryList(){
   const el=document.getElementById("historyList");
@@ -991,19 +1042,35 @@ function resetChat(){
   document.getElementById("jobPhotoGrid").innerHTML="";
   document.getElementById("receiptList").innerHTML="";
   document.getElementById("receiptSection").style.display="none";
+  if(isFirstTimeUser()){
+    showWelcomeMessage();
+    return;
+  }
   addAIMsg(t(`¡Hola ${contractorInfo.firstName}! ¿Qué tipo de factura necesitas?`,`Hi ${contractorInfo.firstName}! What type of invoice do you need?`));
   showInvoiceTypeChips();
+}
+
+function showWelcomeMessage(){
+  addAIMsg(t(
+    "¡Bienvenido a Hablacuenta! 👋\n\nEste app te ayuda a crear facturas profesionales con solo hablar — sin formularios complicados. Solo responde las preguntas y la factura se genera automáticamente.\n\nPrimero, necesito conocer tu información de negocio para que aparezca en tus facturas.",
+    "Welcome to Hablacuenta! 👋\n\nThis app helps you create professional invoices just by talking — no complicated forms. Just answer the questions and the invoice gets built automatically.\n\nFirst, I need to get your business information so it can appear on your invoices."
+  ));
+  const area=document.getElementById("chipArea");area.innerHTML="";
+  const chip=document.createElement("div");chip.className="chip new";
+  chip.textContent=t("Comenzar →","Get Started →");
+  chip.onclick=()=>{area.innerHTML="";showSettings();};
+  area.appendChild(chip);
 }
 
 function showInvoiceTypeChips(){
   const area=document.getElementById("chipArea");area.innerHTML="";
   [
-    {label:t("Trabajo y Materiales","Labor + Materials"),val:"both"},
-    {label:t("Solo Trabajo","Labor Only"),val:"labor"},
-    {label:t("Solo Materiales","Materials Only"),val:"materials"}
+    {label:t("Trabajo y Materiales","Labor + Materials"),val:"both",cls:"type-combined"},
+    {label:t("Solo Trabajo","Labor Only"),val:"labor",cls:"type-labor"},
+    {label:t("Solo Materiales","Materials Only"),val:"materials",cls:"type-materials"}
   ].forEach(o=>{
     const chip=document.createElement("div");
-    chip.className="chip"+(o.val==="materials"?" warn":"");
+    chip.className="chip "+o.cls;
     chip.textContent=o.label;
     chip.onclick=()=>{
       invoiceType=o.val;
@@ -1692,6 +1759,14 @@ function findMissingYearDates(d){
   return missing;
 }
 
+function languageMismatchNotice(){
+  if(invoiceLang===lang) return "";
+  const targetLangName=invoiceLang==="es"?t("español","Spanish"):t("inglés","English");
+  return `<div style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF;font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:10px;">
+    ${t(`Estás viendo esto en el idioma en que lo escribiste. La factura final se generará en ${targetLangName}.`,`You're viewing this in the language you entered it in. The final invoice will be generated in ${targetLangName}.`)}
+  </div>`;
+}
+
 function showInvoicePreview(d,viewNum){
   const area=document.getElementById("invoiceArea");
   const laborTotal=(d.work_items||[]).reduce((s,i)=>s+parseFloat(i.amount),0);
@@ -1700,86 +1775,90 @@ function showInvoicePreview(d,viewNum){
   const hasMatItems=d.materials_items&&d.materials_items.length>0&&(d.has_materials||invoiceType==="materials"||invoiceType==="both");
   const isCombined=hasLaborItems&&hasMatItems;
   const displayName=contractorDisplayName(contractorInfo);
+  const notice=languageMismatchNotice();
   let html="";
 
   if(isCombined){
     const grandTotal=laborTotal+matTotal;
     html+=`<div class="invoice-preview">
-      <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Labor &amp; Materials <span class="tag labor">Labor</span> <span class="tag mat">Materials</span></h3>
+      ${notice}
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">${t("Factura — Trabajo y Materiales","Invoice — Labor & Materials")} <span class="tag combined">${t("Trabajo y Materiales","Labor & Materials")}</span></h3>
       <div style="font-size:12px;color:#888;">#${viewNum||laborNum} &nbsp;·&nbsp; ${d.date}</div>
       <hr class="inv-sep">
-      <div class="inv-label">From</div><div>${displayName}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
+      <div class="inv-label">${t("De","From")}</div><div>${displayName}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
       <hr class="inv-sep">
-      <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
+      <div class="inv-label">${t("Facturar A","Bill To")}</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
       <hr class="inv-sep">
-      ${d.ordered_by?`<div><span class="inv-label">Ordered By</span>&nbsp;${d.ordered_by}</div>`:""}
-      <div><span class="inv-label">Job Address</span>&nbsp;${d.job_address}</div>
+      ${d.ordered_by?`<div><span class="inv-label">${t("Ordenado Por","Ordered By")}</span>&nbsp;${d.ordered_by}</div>`:""}
+      <div><span class="inv-label">${t("Dirección del Trabajo","Job Address")}</span>&nbsp;${d.job_address}</div>
       <hr class="inv-sep">
-      <div class="inv-label">Work Performed</div>
+      <div class="inv-label">${t("Trabajo Realizado","Work Performed")}</div>
       ${(d.work_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.desc}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
-      <div style="display:flex;justify-content:space-between;font-weight:600;padding:4px 0;border-top:1px solid #eee;margin-top:4px;"><span>Subtotal — Labor</span><span>${fmt(laborTotal)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-weight:600;padding:4px 0;border-top:1px solid #eee;margin-top:4px;"><span>${t("Subtotal — Trabajo","Subtotal — Labor")}</span><span>${fmt(laborTotal)}</span></div>
       <hr class="inv-sep">
-      <div class="inv-label">Materials / Reimbursement</div>
+      <div class="inv-label">${t("Materiales / Reembolso","Materials / Reimbursement")}</div>
       ${(d.materials_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.vendor?i.vendor+" — ":""}${i.desc}${i.date?" ("+i.date+")":""}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
-      <div style="display:flex;justify-content:space-between;font-weight:600;padding:4px 0;border-top:1px solid #eee;margin-top:4px;"><span>Subtotal — Materials</span><span>${fmt(matTotal)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-weight:600;padding:4px 0;border-top:1px solid #eee;margin-top:4px;"><span>${t("Subtotal — Materiales","Subtotal — Materials")}</span><span>${fmt(matTotal)}</span></div>
       <hr class="inv-sep">
-      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;"><span>Total</span><span>${fmt(grandTotal)}</span></div>
-      ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('both')">✏️ Something needs correcting</button>`:""}
-      <button class="pdf-btn" onclick="generatePDF('both',${viewNum||"null"})">⬇ Generate PDF</button>
-      <button class="text-btn" onclick="shareInvoicePDF('both',${viewNum||"null"})">📤 Share Invoice</button>
-      ${!viewNum?`<button class="save-btn" onclick="saveForLater()">💾 Save — add more receipts later</button>`:""}
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;"><span>${t("Total","Total")}</span><span>${fmt(grandTotal)}</span></div>
+      ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('both')">✏️ ${t("Algo necesita corrección","Something needs correcting")}</button>`:""}
+      <button class="pdf-btn" onclick="generatePDF('both',${viewNum||"null"})">⬇ ${t("Generar PDF","Generate PDF")}</button>
+      <button class="text-btn" onclick="shareInvoicePDF('both',${viewNum||"null"})">📤 ${t("Compartir Factura","Share Invoice")}</button>
+      ${!viewNum?`<button class="save-btn" onclick="saveForLater()">💾 ${t("Guardar — agregar más recibos después","Save — add more receipts later")}</button>`:""}
     </div>`;
-    html+=`<button class="new-invoice-btn" onclick="resetChat()">＋ Start New Invoice</button>`;
+    html+=`<button class="new-invoice-btn" onclick="resetChat()">＋ ${t("Comenzar Nueva Factura","Start New Invoice")}</button>`;
     area.innerHTML=html;
     return;
   }
 
   if(hasLaborItems){
     html+=`<div class="invoice-preview">
-      <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Labor <span class="tag labor">Labor</span></h3>
+      ${notice}
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">${t("Factura — Trabajo","Invoice — Labor")} <span class="tag labor">${t("Trabajo","Labor")}</span></h3>
       <div style="font-size:12px;color:#888;">#${viewNum||laborNum} &nbsp;·&nbsp; ${d.date}</div>
       <hr class="inv-sep">
-      <div class="inv-label">From</div><div>${displayName}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
+      <div class="inv-label">${t("De","From")}</div><div>${displayName}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
       <hr class="inv-sep">
-      <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
+      <div class="inv-label">${t("Facturar A","Bill To")}</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
       <hr class="inv-sep">
-      ${d.ordered_by?`<div><span class="inv-label">Ordered By</span>&nbsp;${d.ordered_by}</div>`:""}
-      <div><span class="inv-label">Job Address</span>&nbsp;${d.job_address}</div>
+      ${d.ordered_by?`<div><span class="inv-label">${t("Ordenado Por","Ordered By")}</span>&nbsp;${d.ordered_by}</div>`:""}
+      <div><span class="inv-label">${t("Dirección del Trabajo","Job Address")}</span>&nbsp;${d.job_address}</div>
       <hr class="inv-sep">
-      <div class="inv-label">Work Performed</div>
+      <div class="inv-label">${t("Trabajo Realizado","Work Performed")}</div>
       ${(d.work_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.desc}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
       <hr class="inv-sep">
-      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;"><span>Total Labor</span><span>${fmt(laborTotal)}</span></div>
-      ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('labor')">✏️ Something needs correcting</button>`:""}
-      <button class="pdf-btn" onclick="generatePDF('labor',${viewNum||"null"})">⬇ Generate Labor PDF</button>
-      <button class="text-btn" onclick="shareInvoicePDF('labor',${viewNum||"null"})">📤 Share Invoice</button>
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;"><span>${t("Total Trabajo","Total Labor")}</span><span>${fmt(laborTotal)}</span></div>
+      ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('labor')">✏️ ${t("Algo necesita corrección","Something needs correcting")}</button>`:""}
+      <button class="pdf-btn" onclick="generatePDF('labor',${viewNum||"null"})">⬇ ${t("Generar PDF de Trabajo","Generate Labor PDF")}</button>
+      <button class="text-btn" onclick="shareInvoicePDF('labor',${viewNum||"null"})">📤 ${t("Compartir Factura","Share Invoice")}</button>
     </div>`;
   }
 
   if(hasMatItems){
     html+=`<div class="invoice-preview" style="margin-top:1rem;">
-      <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">Invoice — Materials <span class="tag mat">Materials</span></h3>
+      ${notice}
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">${t("Factura — Materiales","Invoice — Materials")} <span class="tag mat">${t("Materiales","Materials")}</span></h3>
       <div style="font-size:12px;color:#888;">#${viewNum||matNum} &nbsp;·&nbsp; ${d.date}</div>
       <hr class="inv-sep">
-      <div class="inv-label">From</div><div>${displayName}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
+      <div class="inv-label">${t("De","From")}</div><div>${displayName}<br>${contractorInfo.address}<br>${contractorInfo.phone}</div>
       <hr class="inv-sep">
-      <div class="inv-label">Bill To</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
+      <div class="inv-label">${t("Facturar A","Bill To")}</div><div><strong>${d.bill_to_name}</strong><br>${d.bill_to_address}<br>${d.bill_to_email}<br>${d.bill_to_phone||""}</div>
       <hr class="inv-sep">
-      ${d.ordered_by?`<div><span class="inv-label">Ordered By</span>&nbsp;${d.ordered_by}</div>`:""}
-      <div><span class="inv-label">Job Address</span>&nbsp;${d.job_address}</div>
+      ${d.ordered_by?`<div><span class="inv-label">${t("Ordenado Por","Ordered By")}</span>&nbsp;${d.ordered_by}</div>`:""}
+      <div><span class="inv-label">${t("Dirección del Trabajo","Job Address")}</span>&nbsp;${d.job_address}</div>
       <hr class="inv-sep">
-      <div class="inv-label">Materials / Reimbursement</div>
+      <div class="inv-label">${t("Materiales / Reembolso","Materials / Reimbursement")}</div>
       ${(d.materials_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${i.vendor?i.vendor+" — ":""}${i.desc}${i.date?" ("+i.date+")":""}</span><span style="font-weight:600;">${fmt(i.amount)}</span></div>`).join("")}
       <hr class="inv-sep">
-      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;"><span>Total Materials</span><span>${fmt(matTotal)}</span></div>
-      ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('materials')">✏️ Something needs correcting</button>`:""}
-      <button class="pdf-btn mat" onclick="generatePDF('materials',${viewNum||"null"})">⬇ Generate Materials PDF</button>
-      <button class="text-btn" onclick="shareInvoicePDF('materials',${viewNum||"null"})">📤 Share Invoice</button>
-      ${!viewNum?`<button class="save-btn" onclick="saveForLater()">💾 Save — add more receipts later</button>`:""}
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;"><span>${t("Total Materiales","Total Materials")}</span><span>${fmt(matTotal)}</span></div>
+      ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('materials')">✏️ ${t("Algo necesita corrección","Something needs correcting")}</button>`:""}
+      <button class="pdf-btn mat" onclick="generatePDF('materials',${viewNum||"null"})">⬇ ${t("Generar PDF de Materiales","Generate Materials PDF")}</button>
+      <button class="text-btn" onclick="shareInvoicePDF('materials',${viewNum||"null"})">📤 ${t("Compartir Factura","Share Invoice")}</button>
+      ${!viewNum?`<button class="save-btn" onclick="saveForLater()">💾 ${t("Guardar — agregar más recibos después","Save — add more receipts later")}</button>`:""}
     </div>`;
   }
 
-  html+=`<button class="new-invoice-btn" onclick="resetChat()">＋ Start New Invoice</button>`;
+  html+=`<button class="new-invoice-btn" onclick="resetChat()">＋ ${t("Comenzar Nueva Factura","Start New Invoice")}</button>`;
   area.innerHTML=html;
 }
 
@@ -1878,9 +1957,64 @@ function saveConversationForLater(){
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
 }
 
+// Translates only the date and task/material description fields to invoiceLang for the final
+// PDF, while the on-screen conversation, confirmation summary, and saved invoiceData stay in
+// whatever language the contractor actually entered them in (the conversation language).
+// Client name, billing/job address, and vendor names are deliberately left untouched — only
+// free-text content the contractor typed (dates, task descriptions, item descriptions) gets
+// translated, since the conversation language is what determines what's *in* those fields,
+// and invoiceLang is the separate, independent setting for what the final document should say.
+async function translateForPDF(d){
+  // Nothing to translate if the invoice is meant to be in the same language it was entered in.
+  if(invoiceLang===lang) return JSON.parse(JSON.stringify(d));
+  const translated=JSON.parse(JSON.stringify(d)); // work on a copy — never mutate the original
+  const toTranslate={
+    date: d.date||"",
+    work_items: (d.work_items||[]).map(i=>i.desc||""),
+    materials_items: (d.materials_items||[]).map(i=>i.desc||"")
+  };
+  if(!toTranslate.date && toTranslate.work_items.every(s=>!s) && toTranslate.materials_items.every(s=>!s)){
+    return translated;
+  }
+  const targetLangName=invoiceLang==="es"?"Spanish":"English";
+  const sourceLangName=lang==="es"?"Spanish":"English";
+  try{
+    const controller=new AbortController();
+    const timeoutId=setTimeout(()=>controller.abort(),20000);
+    const res=await fetch("https://alfonso-invoice-api.onrender.com/api/chat",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model:"claude-sonnet-4-5",
+        max_tokens:800,
+        system:`You translate billing invoice text from ${sourceLangName} to ${targetLangName}. Respond with ONLY a JSON object, no preamble, no markdown fences, exactly matching this shape: {"date":"...","work_items":["...","..."],"materials_items":["...","..."]}. Translate each string from ${sourceLangName} to ${targetLangName}. If a string is already in ${targetLangName} or is empty, return it unchanged. Keep array lengths and order identical to the input. Dates should be translated to a natural ${targetLangName} date format.`,
+        messages:[{role:"user",content:JSON.stringify(toTranslate)}]
+      }),
+      signal:controller.signal
+    });
+    clearTimeout(timeoutId);
+    if(!res.ok) return translated;
+    const data=await res.json();
+    const replyText=data.content[0].text;
+    const jm=replyText.match(/\{[\s\S]*\}/);
+    if(!jm) return translated;
+    const result=JSON.parse(jm[0]);
+    if(result.date) translated.date=result.date;
+    if(Array.isArray(result.work_items)){
+      (translated.work_items||[]).forEach((item,i)=>{ if(result.work_items[i]) item.desc=result.work_items[i]; });
+    }
+    if(Array.isArray(result.materials_items)){
+      (translated.materials_items||[]).forEach((item,i)=>{ if(result.materials_items[i]) item.desc=result.materials_items[i]; });
+    }
+    return translated;
+  }catch(e){
+    return translated; // any failure: fall back to the original (untranslated) data rather than blocking PDF generation
+  }
+}
+
 async function buildPDF(type,forceNum){
   if(!invoiceData)return null;
-  const d=invoiceData;
+  const d=await translateForPDF(invoiceData);
   const doc=new jsPDF({unit:"pt",format:"letter"});
   const W=612,M=50,cw=W-M*2;let y=M;
   function hline(){doc.setDrawColor(220);doc.setLineWidth(0.5);doc.line(M,y,W-M,y);y+=14;}
