@@ -38,6 +38,11 @@ function freshDom() {
     url: "https://hablacuenta.com/",
     beforeParse(window) {
       window.jspdf = { jsPDF: MockJsPDF };
+      // jsdom does not implement IndexedDB at all — wire in a fresh, isolated fake-indexeddb
+      // instance per test so the real savePhotoBlob/getPhotoBlob/deletePhotoBlob code paths
+      // (not just their localStorage-quota-failure fallback) can actually be exercised.
+      const FDBFactory = require("fake-indexeddb/lib/FDBFactory");
+      window.indexedDB = new FDBFactory();
     }
   });
   // Helper: access let/const top-level variables, which aren't exposed as window properties in jsdom's vm context
@@ -1198,6 +1203,8 @@ async function testRetroactiveContractorPhoneFormatting() {
       url: "https://hablacuenta.com/",
       beforeParse(window) {
         window.jspdf = { jsPDF: MockJsPDF };
+        const FDBFactory = require("fake-indexeddb/lib/FDBFactory");
+        window.indexedDB = new FDBFactory();
         Object.entries(storageEntries).forEach(([k, v]) => window.localStorage.setItem(k, v));
       }
     });
@@ -1361,6 +1368,125 @@ async function testMidConversationSaveAndResume() {
     oldStyleHtml.includes("Materials —") && !oldStyleHtml.includes("In Progress"));
 }
 
+async function testIndexedDBPhotoStorage() {
+  console.log("\n=== TEST SUITE 24: IndexedDB Photo Storage (regression for Adrian's silent-save-failure bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const fakePhoto = "data:image/jpeg;base64,AAAABBBBCCCC";
+  const photoId = await win.eval(`savePhotoBlob(${JSON.stringify(fakePhoto)})`);
+  check("savePhotoBlob returns a short ID, not the raw photo data", photoId.length < fakePhoto.length,
+    `got ID: ${photoId}`);
+  check("savePhotoBlob's ID looks like our photo_ prefix scheme", photoId.startsWith("photo_"));
+
+  const retrieved = await win.eval(`getPhotoBlob(${JSON.stringify(photoId)})`);
+  check("getPhotoBlob retrieves the exact original photo data by ID", retrieved === fakePhoto);
+
+  const id2 = await win.eval(`savePhotoBlob("data:image/jpeg;base64,SECOND")`);
+  const both = await win.eval(`getPhotoBlobs([${JSON.stringify(photoId)}, ${JSON.stringify(id2)}])`);
+  check("getPhotoBlobs resolves multiple IDs in order", both[0] === fakePhoto && both[1] === "data:image/jpeg;base64,SECOND");
+
+  await win.eval(`deletePhotoBlob(${JSON.stringify(photoId)})`);
+  const afterDelete = await win.eval(`getPhotoBlob(${JSON.stringify(photoId)})`);
+  check("deletePhotoBlob actually removes the photo (subsequent get returns null)", afterDelete === null);
+
+  const oldShapeResult = await win.eval(`getPhotoBlob({dataUrl: "data:image/jpeg;base64,OLDSHAPE"})`);
+  check("getPhotoBlob handles the old pre-migration {dataUrl} object shape", oldShapeResult === "data:image/jpeg;base64,OLDSHAPE");
+
+  const directResult = await win.eval(`getPhotoBlob("data:image/jpeg;base64,DIRECT")`);
+  check("getPhotoBlob treats a raw dataUrl string as already-resolved", directResult === "data:image/jpeg;base64,DIRECT");
+
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  const hugeFakePhoto = "data:image/jpeg;base64," + "A".repeat(2_000_000);
+  win2.eval(`
+    (async () => {
+      const id = await savePhotoBlob(${JSON.stringify(hugeFakePhoto)});
+      receipts.push(id);
+    })()
+  `);
+  await wait(200);
+  const receiptsArraySize = JSON.stringify(win2.eval('receipts')).length;
+  check("Even after adding a ~2MB photo, the receipts array itself stays tiny (just an ID string)",
+    receiptsArraySize < 200, `receipts array serialized to ${receiptsArraySize} bytes`);
+
+  win2.eval(`
+    invoiceType = "materials";
+    messages = [{role:"user",content:"test"}];
+    convStage = "tasks";
+    currentOrderedBy = "Test Client";
+    contractorInfo.mode = "generic";
+  `);
+  for (let i = 0; i < 5; i++) {
+    win2.eval(`
+      (async () => {
+        const id = await savePhotoBlob(${JSON.stringify(hugeFakePhoto)});
+        receipts.push(id);
+      })()
+    `);
+  }
+  await wait(300);
+  const saveSucceeded = win2.eval(`saveConversationForLater(); incompleteInvoices.length > 0`);
+  check("Saving a conversation with 6 large (~12MB total) photos succeeds, since only small IDs are stored in localStorage",
+    saveSucceeded === true);
+
+  const savedEntryRaw = win2.eval(`localStorage.getItem("alfonso_incomplete")`);
+  check("The actual localStorage payload stays small despite many large photos",
+    savedEntryRaw.length < 50_000, `localStorage payload was ${savedEntryRaw.length} bytes`);
+}
+
+async function testAddressManagerPrivacyFix() {
+  console.log("\n=== TEST SUITE 25: Address Manager Privacy Fix (regression for Adrian's reported BPLW data leak) ===");
+
+  const domBplw = freshDom();
+  const winBplw = domBplw.window;
+  await wait(300);
+  winBplw.eval(`contractorInfo.mode = "bplw"; showAddressManager();`);
+  const bplwOptions = winBplw.eval(`Array.from(document.getElementById("addrClientSelect").options).map(o=>o.value)`);
+  check("BPLW mode shows the real partner list in the Address Manager dropdown",
+    bplwOptions.includes("Andrew Whallon") && bplwOptions.includes("Richard Baisz"));
+
+  const domGeneric = freshDom();
+  const winGeneric = domGeneric.window;
+  await wait(300);
+  winGeneric.eval(`
+    contractorInfo.mode = "generic";
+    addClient({name:"Andrew Whallon", address:"", email:"andywhallon@yahoo.com", phone:"562-882-8632"});
+    showAddressManager();
+  `);
+  const genericOptions = winGeneric.eval(`Array.from(document.getElementById("addrClientSelect").options).map(o=>o.value)`);
+  check("Generic mode dropdown shows the contractor's OWN saved client, not BPLW's hardcoded list",
+    genericOptions.includes("Andrew Whallon") && genericOptions.length === 1,
+    `got options: ${JSON.stringify(genericOptions)}`);
+  check("Generic mode dropdown does NOT include Richard Baisz, Gerry Baisz, or Pravin Patel",
+    !genericOptions.includes("Richard Baisz") && !genericOptions.includes("Gerry Baisz") && !genericOptions.includes("Pravin Patel"));
+
+  const domEmpty = freshDom();
+  const winEmpty = domEmpty.window;
+  await wait(300);
+  winEmpty.eval(`contractorInfo.mode = "generic"; showAddressManager();`);
+  const emptyOptions = winEmpty.eval(`Array.from(document.getElementById("addrClientSelect").options).map(o=>o.value)`);
+  check("Generic mode with no clients shows an empty-state option, not BPLW partners",
+    emptyOptions.length === 1 && emptyOptions[0] === "");
+
+  winGeneric.eval(`document.getElementById("addrClientSelect").value = "Andrew Whallon"; renderAddressManager();`);
+  const addressListHtml = winGeneric.document.getElementById("addressManagerList").innerHTML;
+  check("Generic mode's Andrew Whallon client does not show Alfonso's preloaded Long Beach addresses",
+    !addressListHtml.includes("Santa Fe Ave") && !addressListHtml.includes("Pre-loaded"));
+
+  winGeneric.eval(`startAddressManagerAdd()`);
+  check("startAddressManagerAdd launches the guided address flow correctly in generic mode",
+    winGeneric.eval('guidedAddrState !== null'));
+  check("startAddressManagerAdd does not require BPLW-specific purpose handling to work",
+    winGeneric.eval('guidedAddrState.meta.clientName') === "Andrew Whallon");
+
+  winEmpty.eval(`startAddressManagerAdd()`);
+  check("startAddressManagerAdd with no client selected does not crash (shows alert instead)",
+    winEmpty.eval('guidedAddrState') === null);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -1386,6 +1512,8 @@ async function testMidConversationSaveAndResume() {
     await testJobPhotoPromptFlow();
     await testRetroactiveContractorPhoneFormatting();
     await testMidConversationSaveAndResume();
+    await testIndexedDBPhotoStorage();
+    await testAddressManagerPrivacyFix();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
