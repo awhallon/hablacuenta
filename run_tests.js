@@ -1487,6 +1487,128 @@ async function testAddressManagerPrivacyFix() {
     winEmpty.eval('guidedAddrState') === null);
 }
 
+async function testSpanishTranslationOfStaticUI() {
+  console.log("\n=== TEST SUITE 26: Spanish Translation of Static UI (regression for Adrian's reported untranslated headings) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // Before switching: everything should be in English by default
+  check("Header subtitle defaults to English", win.document.getElementById("headerSubText").textContent === "Invoice Assistant");
+  check("Nav 'Uncompleted' defaults to English", win.document.getElementById("navUncompleted").textContent === "Uncompleted");
+
+  // Switch to Spanish
+  win.eval(`setLang('es')`);
+  await wait(100);
+
+  check("Header subtitle translates to Spanish", win.document.getElementById("headerSubText").textContent === "Asistente de Facturas");
+  check("Nav 'Uncompleted' translates to Spanish", win.document.getElementById("navUncompleted").textContent === "Pendientes");
+  check("Nav 'History' translates to Spanish", win.document.getElementById("navHistory").textContent === "Historial");
+  check("Nav 'Clients' translates to Spanish", win.document.getElementById("navClients").textContent === "Clientes");
+  check("Nav 'Addresses' translates to Spanish", win.document.getElementById("navAddresses").textContent === "Direcciones");
+  check("Nav 'Settings' translates to Spanish", win.document.getElementById("navSettings").textContent === "Configuración");
+
+  // Panel titles
+  win.eval(`showManager()`);
+  check("'Saved Clients' panel title translates to Spanish", win.document.getElementById("mgrTitle").textContent === "Clientes Guardados");
+  win.eval(`showIncomplete()`);
+  check("'Uncompleted Invoices' panel title translates to Spanish", win.document.getElementById("incTitle").textContent === "Facturas Pendientes");
+  win.eval(`showHistory()`);
+  check("'Invoice History' panel title translates to Spanish", win.document.getElementById("historyTitle").textContent === "Historial de Facturas");
+  win.eval(`showSettings()`);
+  check("'Your Business Info' panel title translates to Spanish", win.document.getElementById("settingsTitle").textContent === "Información de tu Negocio");
+  win.eval(`showAddressManager()`);
+  check("'Manage Addresses' panel title translates to Spanish", win.document.getElementById("addrMgrTitle").textContent === "Administrar Direcciones");
+
+  // Settings field labels
+  check("Settings 'First Name' label translates to Spanish", win.document.getElementById("lblFirstName").textContent === "Nombre");
+  check("Settings 'Last Name' label translates to Spanish", win.document.getElementById("lblLastName").textContent === "Apellido");
+  check("Settings 'Address' label translates to Spanish", win.document.getElementById("lblAddress").textContent === "Dirección");
+  check("Settings 'Phone' label translates to Spanish", win.document.getElementById("lblPhone").textContent === "Teléfono");
+  check("Settings 'Billing Setup' label translates to Spanish", win.document.getElementById("lblBillingSetup").textContent === "Configuración de Facturación");
+  check("Settings 'Save' button translates to Spanish", win.document.getElementById("btnSaveSettings").textContent === "Guardar");
+  check("Billing Setup dropdown options translate to Spanish",
+    win.document.getElementById("optBplw").textContent.includes("socios") && win.document.getElementById("optGeneric").textContent.includes("propios clientes"));
+
+  // Back buttons (every panel) should all say the Spanish equivalent
+  ["mgrBackBtn","incBackBtn","historyBackBtn","settingsBackBtn","addrMgrBackBtn"].forEach(id => {
+    check(`Back button #${id} translates to Spanish`, win.document.getElementById(id).textContent === "← Atrás");
+  });
+
+  // Switching back to English should restore everything correctly (no stuck-Spanish bug)
+  win.eval(`setLang('en')`);
+  await wait(100);
+  check("Switching back to English restores the header subtitle", win.document.getElementById("headerSubText").textContent === "Invoice Assistant");
+  check("Switching back to English restores nav labels", win.document.getElementById("navClients").textContent === "Clients");
+}
+
+async function testSpanishTranslationOfDynamicLists() {
+  console.log("\n=== TEST SUITE 27: Spanish Translation of Dynamically-Rendered Lists ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+  win.eval(`setLang('es')`);
+  await wait(100);
+
+  // Empty states
+  win.eval(`showManager()`);
+  const emptyClientsHtml = win.document.getElementById("clientList").innerHTML;
+  check("Empty Clients list shows Spanish empty-state text",
+    emptyClientsHtml.includes("Aún no hay clientes guardados"));
+
+  win.eval(`showIncomplete()`);
+  const emptyIncHtml = win.document.getElementById("incompleteList").innerHTML;
+  check("Empty Uncompleted list shows Spanish empty-state text",
+    emptyIncHtml.includes("No hay facturas pendientes"));
+
+  win.eval(`showHistory()`);
+  const emptyHistHtml = win.document.getElementById("historyList").innerHTML;
+  check("Empty History list shows Spanish empty-state text",
+    emptyHistHtml.includes("Aún no hay facturas"));
+
+  // Populated client list — Delete button should be in Spanish
+  win.eval(`addClient({name:"Cliente Prueba", address:"123 Calle", email:"x@x.com", phone:""}); renderClientList();`);
+  const clientListHtml = win.document.getElementById("clientList").innerHTML;
+  check("Populated client list shows Spanish 'Eliminar' (Delete) button", clientListHtml.includes("Eliminar"));
+
+  // Populated incomplete list — in-progress conversation label
+  win.eval(`
+    incompleteInvoices = [{kind:"conversation", invoiceType:"labor", messages:[{role:"user",content:"x"}], convStage:"tasks", currentOrderedBy:"Test", contractorMode:"bplw", job_address:"123 Main St", saved_at:new Date().toISOString()}];
+    renderIncompleteList();
+  `);
+  const incHtml = win.document.getElementById("incompleteList").innerHTML;
+  check("In-progress conversation entry shows Spanish 'Trabajo' and 'En Progreso' labels",
+    incHtml.includes("Trabajo") && incHtml.includes("En Progreso"));
+
+  // Populated history list
+  win.eval(`
+    invoiceHistory = [{type:"both", invNum:1, invoiceData:{job_address:"123 Main St", date:"x", ordered_by:""}, receipts:[], jobPhotos:[], created_at:new Date().toISOString()}];
+    renderHistoryList();
+  `);
+  const histHtml = win.document.getElementById("historyList").innerHTML;
+  check("History entry shows Spanish 'Trabajo y Materiales' label for combined invoices",
+    histHtml.includes("Trabajo y Materiales"));
+
+  // Address Manager: empty state, pre-loaded section, and Edit/Delete buttons
+  win.eval(`contractorInfo.mode = "bplw"; showAddressManager();`);
+  win.eval(`document.getElementById("addrClientSelect").value = "Andrew Whallon"; renderAddressManager();`);
+  const addrHtml = win.document.getElementById("addressManagerList").innerHTML;
+  check("Address Manager shows Spanish 'Precargado' (Pre-loaded) section label", addrHtml.includes("Precargado"));
+
+  win.eval(`saveClientAddress("Andrew Whallon", {id:"x", display:"Test St", full:"Test St, City CA 90000"}); renderAddressManager();`);
+  const addrHtml2 = win.document.getElementById("addressManagerList").innerHTML;
+  check("Address Manager shows Spanish 'Agregadas' (Added) section for saved addresses", addrHtml2.includes("Agregadas"));
+  check("Address Manager shows Spanish 'Editar' and 'Eliminar' buttons", addrHtml2.includes("Editar") && addrHtml2.includes("Eliminar"));
+
+  // Generic mode empty client dropdown option
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval(`setLang('es'); contractorInfo.mode = "generic"; showAddressManager();`);
+  const emptyOptionText = win2.eval(`document.getElementById("addrClientSelect").options[0].textContent`);
+  check("Generic mode's empty client dropdown option is in Spanish", emptyOptionText.includes("Aún no hay clientes"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -1514,6 +1636,8 @@ async function testAddressManagerPrivacyFix() {
     await testMidConversationSaveAndResume();
     await testIndexedDBPhotoStorage();
     await testAddressManagerPrivacyFix();
+    await testSpanishTranslationOfStaticUI();
+    await testSpanishTranslationOfDynamicLists();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
