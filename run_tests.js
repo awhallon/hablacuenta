@@ -1609,6 +1609,76 @@ async function testSpanishTranslationOfDynamicLists() {
   check("Generic mode's empty client dropdown option is in Spanish", emptyOptionText.includes("Aún no hay clientes"));
 }
 
+async function testAiConversationRespondsInSelectedLanguage() {
+  console.log("\n=== TEST SUITE 28: AI Conversation Responds in Selected Language (regression for Adrian's reported English-only summary bug) ===");
+
+  // English (default): system prompt should instruct English responses
+  const domEn = freshDom();
+  const winEn = domEn.window;
+  await wait(300);
+  const sysPromptEn = winEn.eval('getSystemPrompt()');
+  check("System prompt instructs English when lang is 'en'", sysPromptEn.includes("Respond ONLY in English"));
+  check("System prompt does NOT say 'English only' as a hardcoded unconditional rule anymore",
+    !sysPromptEn.match(/\.\s*English only\s*\./i));
+
+  // Spanish: system prompt should instruct Spanish responses instead
+  const domEs = freshDom();
+  const winEs = domEs.window;
+  await wait(300);
+  winEs.eval(`setLang('es')`);
+  const sysPromptEs = winEs.eval('getSystemPrompt()');
+  check("System prompt instructs Spanish when lang is 'es'", sysPromptEs.includes("Respond ONLY in Spanish"));
+
+  // The confirmation summary field-label template itself must switch language too —
+  // otherwise the AI is told to respond in Spanish but use literal English field labels
+  check("Spanish system prompt's confirmation template uses Spanish field labels",
+    sysPromptEs.includes("Cliente:") && sysPromptEs.includes("Dirección del Cliente:") && sysPromptEs.includes("Fecha:"));
+  check("Spanish system prompt's confirmation template does NOT use the English field labels",
+    !sysPromptEs.includes("Client Address: [bill-to address]"));
+  check("English system prompt's confirmation template still uses English field labels",
+    sysPromptEn.includes("Client Address:") && sysPromptEn.includes("Job Address:"));
+
+  // The literal job-address question instructed to the AI must match what smartChips
+  // actually listens for in Spanish, the same class of bug found earlier with the
+  // confirmation trigger — this test guards against that recurring for any other question.
+  winEs.eval(`contractorInfo.mode = "generic";`);
+  const sysPromptEsGeneric = winEs.eval('getSystemPrompt()');
+  const jobAddrQuestionMatch = sysPromptEsGeneric.match(/Ask "([^"]+)"\s*The app will guide/);
+  check("Spanish generic-mode system prompt contains an explicit job-address question", !!jobAddrQuestionMatch);
+  if (jobAddrQuestionMatch) {
+    const instructedPhrase = jobAddrQuestionMatch[1].toLowerCase();
+    const jobAddrPhrases = winEs.eval(`["which address","which street","what street","street is the job","street was the work","job location","job address","where was the job","location of the job","address was the job","address of the job","dirección del trabajo","qué dirección fue el trabajo","en qué dirección","dirección de la calle","dirección fue el trabajo"]`);
+    const matches = jobAddrPhrases.some(p => instructedPhrase.includes(p));
+    check(`The instructed Spanish job-address question ("${jobAddrQuestionMatch[1]}") actually matches a trigger phrase smartChips listens for`,
+      matches, "if this fails, the AI would ask the right question in Spanish but the app would never recognize it — silently breaking the guided address flow");
+  }
+
+  // Same check for the receipt-photo and job-photo "say exactly" instructions —
+  // confirm the literal instructed Spanish phrase matches what showJobPhotoChips/showReceiptPhotoChips listen for
+  winEs.eval(`invoiceType = "both";`);
+  const sysPromptEsBoth = winEs.eval('getSystemPrompt()');
+  check("Spanish prompt's job-photo instruction matches the showJobPhotoChips trigger phrase",
+    sysPromptEsBoth.toLowerCase().includes("agregar una foto del trabajo"));
+  check("Spanish prompt's receipt-photo instruction matches the showReceiptPhotoChips trigger phrase",
+    sysPromptEsBoth.toLowerCase().includes("agregar una foto de este recibo"));
+  check("Spanish prompt's materials-purchase question matches the yes/no trigger phrase",
+    sysPromptEsBoth.toLowerCase().includes("compraste materiales"));
+  check("Spanish prompt's 'any other receipts' question matches the yes/no trigger phrase",
+    sysPromptEsBoth.toLowerCase().includes("otro recibo"));
+
+  // BPLW mode: the partner question must also be in Spanish and match the partner trigger
+  winEs.eval(`contractorInfo.mode = "bplw";`);
+  const sysPromptEsBplw = winEs.eval('getSystemPrompt()');
+  check("Spanish BPLW prompt's partner question matches the 'which partner' trigger phrase",
+    sysPromptEsBplw.toLowerCase().includes("qué socio"));
+  check("Spanish BPLW prompt's client-type question is in Spanish",
+    sysPromptEsBplw.includes("¿BPLW Management o un cliente diferente?"));
+
+  // Year-clarification phrase (used by the wrong-year-correction backstop) must also match in Spanish
+  check("Spanish prompt's year-clarification phrase matches the AI-stated-wrong-year correction regex",
+    /este año\s*\(\d{4}\)/i.test(sysPromptEsBoth));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -1638,6 +1708,7 @@ async function testSpanishTranslationOfDynamicLists() {
     await testAddressManagerPrivacyFix();
     await testSpanishTranslationOfStaticUI();
     await testSpanishTranslationOfDynamicLists();
+    await testAiConversationRespondsInSelectedLanguage();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
