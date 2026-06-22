@@ -1730,12 +1730,22 @@ async function testFirstTimeWelcomeAndOnboarding() {
   check("Welcome message does NOT show invoice-type chips yet (nothing to invoice for until info is set)",
     win.document.getElementById("chipArea").innerHTML === "" || !win.document.getElementById("chipArea").innerHTML.includes("Labor"));
 
-  const chipHtml = win.document.getElementById("chipArea").innerHTML;
-  check("A 'Get Started' chip is shown to route the user into Settings", chipHtml.toLowerCase().includes("get started"));
+  // The very first message must be bilingual (both English and Spanish), since the user
+  // hasn't chosen a language yet, and must explain the toggle at the top of the screen.
+  check("First welcome message is shown in English", chatHtml.includes("Welcome to Hablacuenta"));
+  check("First welcome message is ALSO shown in Spanish in the same message (bilingual, no language chosen yet)",
+    chatHtml.includes("Bienvenido a Hablacuenta"));
+  check("First welcome message mentions the language toggle/switch at the top of the screen (English)",
+    chatHtml.toLowerCase().includes("switch at the top"));
+  check("First welcome message mentions the language toggle/switch at the top of the screen (Spanish)",
+    chatHtml.toLowerCase().includes("interruptor en la parte superior"));
 
-  // Clicking Get Started should open Settings
+  const chipHtml = win.document.getElementById("chipArea").innerHTML;
+  check("A 'Continue' chip is shown to route the user into Settings", chipHtml.toLowerCase().includes("continue"));
+
+  // Clicking Continue should open Settings
   win.eval(`document.querySelector('#chipArea .chip').click()`);
-  check("Clicking Get Started opens the Settings panel", win.document.getElementById("settingsPanel").style.display === "block");
+  check("Clicking Continue opens the Settings panel", win.document.getElementById("settingsPanel").style.display === "block");
 
   // Filling in info and saving should return to the normal chat flow automatically
   win.document.getElementById("setFirstName").value = "Maria";
@@ -1762,6 +1772,25 @@ async function testFirstTimeWelcomeAndOnboarding() {
     !win2.document.getElementById("chatBox").innerHTML.toLowerCase().includes("welcome"));
   check("A returning user sees the normal greeting with their name",
     win2.document.getElementById("chatBox").innerHTML.includes("Carlos"));
+
+  // Toggling the language DURING the welcome flow (before tapping Continue) should re-show
+  // the welcome flow with the second message and Continue button now in the chosen language,
+  // while the bilingual first message is always shown regardless.
+  const dom3 = freshDom();
+  const win3 = dom3.window;
+  await wait(300);
+  win3.eval(`setLang('es')`);
+  await wait(100);
+  const esChatHtml = win3.document.getElementById("chatBox").innerHTML;
+  check("Toggling to Spanish during welcome still shows the bilingual first message (English half)",
+    esChatHtml.includes("Welcome to Hablacuenta"));
+  check("Toggling to Spanish during welcome still shows the bilingual first message (Spanish half)",
+    esChatHtml.includes("Bienvenido a Hablacuenta"));
+  const esChipHtml = win3.document.getElementById("chipArea").innerHTML;
+  check("After switching to Spanish during welcome, the second message's chip now says 'Continuar' instead of 'Continue'",
+    esChipHtml.includes("Continuar"));
+  check("Still a first-time user after just toggling language (no business info entered yet)",
+    win3.eval('isFirstTimeUser()') === true);
 }
 
 async function testDualLanguageToggle() {
