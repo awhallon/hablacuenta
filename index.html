@@ -89,7 +89,7 @@ input[type=file]{display:none;}
   <div class="header">
     <div>
       <div class="header-title" id="headerTitleText">📄 Alfonso Sanchez Property Services</div>
-      <div class="header-sub">Invoice Assistant</div>
+      <div class="header-sub" id="headerSubText">Invoice Assistant</div>
     </div>
     <div class="header-right">
       <div class="lang-toggle">
@@ -97,18 +97,18 @@ input[type=file]{display:none;}
         <button class="lang-btn active" id="btnEN" onclick="setLang('en')">EN</button>
       </div>
       <div class="nav-links">
-        <span class="nav-link orange" onclick="showIncomplete()">Uncompleted</span>
-        <span class="nav-link" onclick="showHistory()">History</span>
-        <span class="nav-link" onclick="showManager()">Clients</span>
-        <span class="nav-link" onclick="showAddressManager()">Addresses</span>
-        <span class="nav-link" onclick="showSettings()">Settings</span>
+        <span class="nav-link orange" id="navUncompleted" onclick="showIncomplete()">Uncompleted</span>
+        <span class="nav-link" id="navHistory" onclick="showHistory()">History</span>
+        <span class="nav-link" id="navClients" onclick="showManager()">Clients</span>
+        <span class="nav-link" id="navAddresses" onclick="showAddressManager()">Addresses</span>
+        <span class="nav-link" id="navSettings" onclick="showSettings()">Settings</span>
       </div>
     </div>
   </div>
 
   <div id="managerPanel" style="display:none;">
     <div class="mgr-panel"><h3 id="mgrTitle">Saved Clients</h3><div id="clientList"></div></div>
-    <button class="back-btn" onclick="hideManager()">← Back</button>
+    <button class="back-btn" id="mgrBackBtn" onclick="hideManager()">← Back</button>
   </div>
 
   <div id="incompletePanel" style="display:none;">
@@ -116,54 +116,54 @@ input[type=file]{display:none;}
       <h3 id="incTitle">Uncompleted Invoices</h3>
       <div id="incompleteList"></div>
     </div>
-    <button class="back-btn" onclick="hideIncomplete()">← Back</button>
+    <button class="back-btn" id="incBackBtn" onclick="hideIncomplete()">← Back</button>
   </div>
 
   <div id="historyPanel" style="display:none;">
     <div class="mgr-panel">
-      <h3>Invoice History</h3>
+      <h3 id="historyTitle">Invoice History</h3>
       <div id="historyList"></div>
     </div>
-    <button class="back-btn" onclick="hideHistory()">← Back</button>
+    <button class="back-btn" id="historyBackBtn" onclick="hideHistory()">← Back</button>
   </div>
 
   <div id="settingsPanel" style="display:none;">
     <div class="mgr-panel">
-      <h3>Your Business Info</h3>
-      <p style="font-size:12px;color:#888;margin-bottom:12px;">This appears as the "From" on every invoice you create on this device.</p>
-      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">First Name</label>
+      <h3 id="settingsTitle">Your Business Info</h3>
+      <p id="settingsDesc" style="font-size:12px;color:#888;margin-bottom:12px;">This appears as the "From" on every invoice you create on this device.</p>
+      <label id="lblFirstName" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">First Name</label>
       <input id="setFirstName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
-      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Last Name</label>
+      <label id="lblLastName" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Last Name</label>
       <input id="setLastName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
-      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Business Name (shown on invoices — leave blank to use your first/last name)</label>
+      <label id="lblBusinessName" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Business Name (shown on invoices — leave blank to use your first/last name)</label>
       <input id="setBusinessName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
-      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Address</label>
+      <label id="lblAddress" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Address</label>
       <input id="setAddress" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:6px;">
-      <button type="button" class="text-btn" style="margin-top:0;margin-bottom:12px;" onclick="startSettingsGuidedAddress()">📍 Fill in step by step</button>
-      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Phone</label>
+      <button type="button" class="text-btn" id="btnFillStepByStep" style="margin-top:0;margin-bottom:12px;" onclick="startSettingsGuidedAddress()">📍 Fill in step by step</button>
+      <label id="lblPhone" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Phone</label>
       <input id="setPhone" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:16px;">
-      <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Billing Setup</label>
+      <label id="lblBillingSetup" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Billing Setup</label>
       <select id="setMode" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:16px;">
-        <option value="bplw">BPLW Management (partners &amp; shared properties)</option>
-        <option value="generic">My own clients (general contractor)</option>
+        <option id="optBplw" value="bplw">BPLW Management (partners &amp; shared properties)</option>
+        <option id="optGeneric" value="generic">My own clients (general contractor)</option>
       </select>
-      <button class="pdf-btn" onclick="saveSettingsForm()">Save</button>
+      <button class="pdf-btn" id="btnSaveSettings" onclick="saveSettingsForm()">Save</button>
       <div id="settingsSavedMsg" style="display:none;color:#16A34A;font-size:13px;margin-top:10px;text-align:center;">✓ Saved</div>
     </div>
-    <button class="back-btn" onclick="hideSettings()">← Back</button>
+    <button class="back-btn" id="settingsBackBtn" onclick="hideSettings()">← Back</button>
   </div>
 
   <div id="addressManagerPanel" style="display:none;">
     <div class="mgr-panel">
-      <h3>Manage Addresses</h3>
+      <h3 id="addrMgrTitle">Manage Addresses</h3>
       <div style="margin-bottom:10px;">
         <select id="addrClientSelect" onchange="renderAddressManager()" style="width:100%;padding:8px;border-radius:8px;border:1px solid #E5E7EB;font-size:13px;">
         </select>
       </div>
       <div id="addressManagerList"></div>
-      <button class="add-photo-btn" style="margin-top:8px;" onclick="startAddressManagerAdd()">+ Add new address</button>
+      <button class="add-photo-btn" id="btnAddNewAddress" style="margin-top:8px;" onclick="startAddressManagerAdd()">+ Add new address</button>
     </div>
-    <button class="back-btn" onclick="hideAddressManager()">← Back</button>
+    <button class="back-btn" id="addrMgrBackBtn" onclick="hideAddressManager()">← Back</button>
   </div>
 
   <div id="mainPanel">
@@ -759,11 +759,44 @@ When you have EVERYTHING respond ONLY with valid JSON:
 {"done":true,"client_type":"${isGeneric?"generic":"bplw"}","bill_to_name":"${isGeneric?"CLIENT NAME":"BPLW Management"}","bill_to_address":"${isGeneric?"CLIENT ADDRESS":"PO Box 9395, Long Beach CA 90810"}","bill_to_email":"EMAIL","bill_to_phone":"PHONE","ordered_by":${isGeneric?'""':'"NAME"'},"job_address":"FULL ADDRESS","work_items":[{"desc":"x","amount":0}],"materials_items":[{"vendor":"x","desc":"x","date":"x","amount":0}],"date":"DATE","has_materials":${invoiceType!=="labor"},"has_labor":${invoiceType!=="materials"},"new_client":null}`;
 }
 
+function applyStaticTranslations(){
+  const set=(id,es,en)=>{const el=document.getElementById(id);if(el)el.textContent=t(es,en);};
+  set("headerSubText","Asistente de Facturas","Invoice Assistant");
+  set("navUncompleted","Pendientes","Uncompleted");
+  set("navHistory","Historial","History");
+  set("navClients","Clientes","Clients");
+  set("navAddresses","Direcciones","Addresses");
+  set("navSettings","Configuración","Settings");
+  set("mgrTitle","Clientes Guardados","Saved Clients");
+  set("mgrBackBtn","← Atrás","← Back");
+  set("incTitle","Facturas Pendientes","Uncompleted Invoices");
+  set("incBackBtn","← Atrás","← Back");
+  set("historyTitle","Historial de Facturas","Invoice History");
+  set("historyBackBtn","← Atrás","← Back");
+  set("settingsTitle","Información de tu Negocio","Your Business Info");
+  set("settingsDesc","Esto aparece como \"De\" en cada factura que crees en este dispositivo.","This appears as the \"From\" on every invoice you create on this device.");
+  set("lblFirstName","Nombre","First Name");
+  set("lblLastName","Apellido","Last Name");
+  set("lblBusinessName","Nombre del Negocio (se muestra en las facturas — déjalo en blanco para usar tu nombre y apellido)","Business Name (shown on invoices — leave blank to use your first/last name)");
+  set("lblAddress","Dirección","Address");
+  set("btnFillStepByStep","📍 Completar paso a paso","📍 Fill in step by step");
+  set("lblPhone","Teléfono","Phone");
+  set("lblBillingSetup","Configuración de Facturación","Billing Setup");
+  set("optBplw","BPLW Management (socios y propiedades compartidas)","BPLW Management (partners & shared properties)");
+  set("optGeneric","Mis propios clientes (contratista general)","My own clients (general contractor)");
+  set("btnSaveSettings","Guardar","Save");
+  set("settingsBackBtn","← Atrás","← Back");
+  set("addrMgrTitle","Administrar Direcciones","Manage Addresses");
+  set("btnAddNewAddress","+ Agregar nueva dirección","+ Add new address");
+  set("addrMgrBackBtn","← Atrás","← Back");
+}
+
 function setLang(l){
   lang=l;
   document.getElementById("btnES").classList.toggle("active",l==="es");
   document.getElementById("btnEN").classList.toggle("active",l==="en");
   document.getElementById("userInput").placeholder=t("Escribe aquí...","Type here...");
+  applyStaticTranslations();
   resetChat();
 }
 
@@ -838,14 +871,14 @@ function saveSettingsForm(){
 }
 function renderHistoryList(){
   const el=document.getElementById("historyList");
-  if(!invoiceHistory.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">No invoices yet.</div>`;return;}
+  if(!invoiceHistory.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">${t("Aún no hay facturas.","No invoices yet.")}</div>`;return;}
   el.innerHTML=invoiceHistory.map((h,i)=>{
     const d=h.invoiceData;
-    const label=h.type==="labor"?"Labor":h.type==="both"?"Labor & Materials":"Materials";
+    const label=h.type==="labor"?t("Trabajo","Labor"):h.type==="both"?t("Trabajo y Materiales","Labor & Materials"):t("Materiales","Materials");
     const dateStr=d.date||"";
     return `<div class="incomplete-item" onclick="viewHistoryInvoice(${i})">
-      <div class="incomplete-title">#${h.invNum} — ${label} — ${d.job_address||"Job"}</div>
-      <div class="incomplete-sub">${d.ordered_by||""} · ${dateStr} · Tap to view</div>
+      <div class="incomplete-title">#${h.invNum} — ${label} — ${d.job_address||t("Trabajo","Job")}</div>
+      <div class="incomplete-sub">${d.ordered_by||""} · ${dateStr} · ${t("Toca para ver","Tap to view")}</div>
     </div>`;
   }).join("");
 }
@@ -866,24 +899,24 @@ function viewHistoryInvoice(i){
 }
 function renderClientList(){
   const el=document.getElementById("clientList");
-  if(!savedClients.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">No saved clients yet.</div>`;return;}
-  el.innerHTML=savedClients.map((c,i)=>`<div class="client-row"><div class="client-info">${c.name}<span>${c.address}</span><span>${c.email}${c.phone?" · "+c.phone:""}</span></div><button class="del-btn" onclick="deleteClient(${i})">Delete</button></div>`).join("");
+  if(!savedClients.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">${t("Aún no hay clientes guardados.","No saved clients yet.")}</div>`;return;}
+  el.innerHTML=savedClients.map((c,i)=>`<div class="client-row"><div class="client-info">${c.name}<span>${c.address}</span><span>${c.email}${c.phone?" · "+c.phone:""}</span></div><button class="del-btn" onclick="deleteClient(${i})">${t("Eliminar","Delete")}</button></div>`).join("");
 }
 function deleteClient(i){savedClients.splice(i,1);saveClients();renderClientList();}
 function renderIncompleteList(){
   const el=document.getElementById("incompleteList");
-  if(!incompleteInvoices.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">No uncompleted invoices.</div>`;return;}
+  if(!incompleteInvoices.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">${t("No hay facturas pendientes.","No uncompleted invoices.")}</div>`;return;}
   el.innerHTML=incompleteInvoices.map((inv,i)=>{
     if(inv.kind==="conversation"){
-      const typeLabel=inv.invoiceType==="labor"?"Labor":inv.invoiceType==="materials"?"Materials":"Labor & Materials";
+      const typeLabel=inv.invoiceType==="labor"?t("Trabajo","Labor"):inv.invoiceType==="materials"?t("Materiales","Materials"):t("Trabajo y Materiales","Labor & Materials");
       return `<div class="incomplete-item" onclick="continueIncomplete(${i})">
-        <div class="incomplete-title">${typeLabel} — In Progress${inv.job_address?" — "+inv.job_address:""}</div>
-        <div class="incomplete-sub">${(inv.messages||[]).length} messages so far · Tap to continue</div>
+        <div class="incomplete-title">${typeLabel} — ${t("En Progreso","In Progress")}${inv.job_address?" — "+inv.job_address:""}</div>
+        <div class="incomplete-sub">${(inv.messages||[]).length} ${t("mensajes hasta ahora","messages so far")} · ${t("Toca para continuar","Tap to continue")}</div>
       </div>`;
     }
     return `<div class="incomplete-item" onclick="continueIncomplete(${i})">
-      <div class="incomplete-title">Materials — ${inv.job_address||"Job TBD"}</div>
-      <div class="incomplete-sub">${inv.receipts_count||0} receipt(s) · ${inv.date||"Date TBD"} · Tap to continue</div>
+      <div class="incomplete-title">${t("Materiales","Materials")} — ${inv.job_address||t("Trabajo Pendiente","Job TBD")}</div>
+      <div class="incomplete-sub">${inv.receipts_count||0} ${t("recibo(s)","receipt(s)")} · ${inv.date||t("Fecha Pendiente","Date TBD")} · ${t("Toca para continuar","Tap to continue")}</div>
     </div>`;
   }).join("");
 }
@@ -1439,7 +1472,7 @@ async function renderReceipts(){
     const div=document.createElement("div");div.className="receipt-entry";
     const header=document.createElement("div");header.className="receipt-entry-header";
     const label=document.createElement("span");label.textContent=`Receipt ${i+1}`;
-    const del=document.createElement("button");del.className="del-receipt-btn";del.textContent="Delete";
+    const del=document.createElement("button");del.className="del-receipt-btn";del.textContent=t("Eliminar","Delete");
     del.onclick=()=>{const removedId=receipts[i];receipts.splice(i,1);deletePhotoBlob(removedId);renderReceipts();};
     header.appendChild(label);header.appendChild(del);
     const img=document.createElement("img");img.src=blobs[i]||"";
@@ -2013,7 +2046,7 @@ function showAddressManager(){
   if(contractorInfo.mode==="generic"){
     select.innerHTML=savedClients.length
       ? savedClients.map(c=>`<option value="${c.name}">${c.name}</option>`).join("")
-      : `<option value="">No clients saved yet</option>`;
+      : `<option value="">${t("Aún no hay clientes guardados","No clients saved yet")}</option>`;
   } else {
     select.innerHTML=BPLW_PARTNERS.map(p=>`<option value="${p.name}">${p.name}</option>`).join("");
   }
@@ -2026,7 +2059,7 @@ function hideAddressManager(){
 function renderAddressManager(){
   const clientName=document.getElementById("addrClientSelect").value;
   const el=document.getElementById("addressManagerList");
-  if(!clientName){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">No clients saved yet. Add a client first from the "Clients" tab.</div>`;return;}
+  if(!clientName){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">${t('Aún no hay clientes guardados. Agrega un cliente primero desde la pestaña "Clientes".','No clients saved yet. Add a client first from the "Clients" tab.')}</div>`;return;}
   // For Andrew (in BPLW mode specifically), show pre-loaded + saved; for everyone else just saved
   const isAndrew=clientName==="Andrew Whallon"&&contractorInfo.mode==="bplw";
   const saved=[];
@@ -2035,19 +2068,19 @@ function renderAddressManager(){
   
   let html="";
   if(preloaded.length){
-    html+='<div style="font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;">Pre-loaded</div>';
+    html+=`<div style="font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;">${t("Precargado","Pre-loaded")}</div>`;
     preloaded.forEach((a,i)=>{
       html+=`<div class="client-row"><div class="client-info">${a.display}<span>${a.full}</span></div></div>`;
     });
   }
   if(saved.length){
-    html+='<div style="font-size:11px;color:#888;margin:10px 0 6px;text-transform:uppercase;">Added</div>';
+    html+=`<div style="font-size:11px;color:#888;margin:10px 0 6px;text-transform:uppercase;">${t("Agregadas","Added")}</div>`;
     saved.forEach((a,i)=>{
-      html+=`<div class="client-row"><div class="client-info">${a.display}<span>${a.full}</span></div><div style="display:flex;gap:6px;"><button class="del-btn" onclick="editAddress('${clientName}',${i})">Edit</button><button class="del-btn" onclick="deleteAddress('${clientName}',${i})">Delete</button></div></div>`;
+      html+=`<div class="client-row"><div class="client-info">${a.display}<span>${a.full}</span></div><div style="display:flex;gap:6px;"><button class="del-btn" onclick="editAddress('${clientName}',${i})">${t("Editar","Edit")}</button><button class="del-btn" onclick="deleteAddress('${clientName}',${i})">${t("Eliminar","Delete")}</button></div></div>`;
     });
   }
   if(!preloaded.length&&!saved.length){
-    html='<div style="font-size:13px;color:#888;padding:8px 0;">No addresses saved yet.</div>';
+    html=`<div style="font-size:13px;color:#888;padding:8px 0;">${t("Aún no hay direcciones guardadas.","No addresses saved yet.")}</div>`;
   }
   el.innerHTML=html;
 }
@@ -2089,7 +2122,7 @@ function editAddress(clientName, idx){
   document.getElementById("chatBox").innerHTML="";
   document.getElementById("chipArea").innerHTML="";
   
-  addAIMsg(`Current address:\n${full}\n\nWhat would you like to change?`);
+  addAIMsg(t(`Dirección actual:\n${full}\n\n¿Qué te gustaría cambiar?`,`Current address:\n${full}\n\nWhat would you like to change?`));
   showAddressEditChips();
 }
 
@@ -2101,11 +2134,11 @@ function showAddressEditChips(){
   const area=document.getElementById("chipArea");area.innerHTML="";
   const d=editingAddressData;
   const fields=[
-    {label:`Street Name (${d.streetName})`, field:"streetName"},
-    {label:`Street Number (${d.streetNum})`, field:"streetNum"},
-    {label:`Unit (${d.unit||"none"})`, field:"unit"},
-    {label:`City (${d.city})`, field:"city"},
-    {label:`Zip (${d.zip})`, field:"zip"},
+    {label:t(`Nombre de Calle (${d.streetName})`,`Street Name (${d.streetName})`), field:"streetName"},
+    {label:t(`Número de Calle (${d.streetNum})`,`Street Number (${d.streetNum})`), field:"streetNum"},
+    {label:t(`Unidad (${d.unit||"ninguna"})`,`Unit (${d.unit||"none"})`), field:"unit"},
+    {label:t(`Ciudad (${d.city})`,`City (${d.city})`), field:"city"},
+    {label:t(`Código Postal (${d.zip})`,`Zip (${d.zip})`), field:"zip"},
   ];
   fields.forEach(f=>{
     const chip=document.createElement("div");chip.className="chip";chip.textContent=f.label;
@@ -2113,18 +2146,18 @@ function showAddressEditChips(){
       area.innerHTML="";
       newAddrState={step:"edit_field",data:{...d,field:f.field}};
       const prompts={
-        streetName:"What is the correct street name?",
-        streetNum:"What is the correct street number?",
-        unit:"What is the unit number? (type 'none' if no unit)",
-        city:"What is the correct city?",
-        zip:"What is the correct zip code?"
+        streetName:t("¿Cuál es el nombre correcto de la calle?","What is the correct street name?"),
+        streetNum:t("¿Cuál es el número correcto de la calle?","What is the correct street number?"),
+        unit:t("¿Cuál es el número de unidad? (escribe 'ninguna' si no hay unidad)","What is the unit number? (type 'none' if no unit)"),
+        city:t("¿Cuál es la ciudad correcta?","What is the correct city?"),
+        zip:t("¿Cuál es el código postal correcto?","What is the correct zip code?")
       };
       addAIMsg(prompts[f.field]);
     };
     area.appendChild(chip);
   });
   // Done button
-  const done=document.createElement("div");done.className="chip new";done.textContent="✓ Done editing";
+  const done=document.createElement("div");done.className="chip new";done.textContent=t("✓ Terminado","✓ Done editing");
   done.onclick=()=>{
     area.innerHTML="";
     editingAddressData=null;
