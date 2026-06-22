@@ -158,10 +158,6 @@ input[type=file]{display:none;}
       <h3>Manage Addresses</h3>
       <div style="margin-bottom:10px;">
         <select id="addrClientSelect" onchange="renderAddressManager()" style="width:100%;padding:8px;border-radius:8px;border:1px solid #E5E7EB;font-size:13px;">
-          <option value="Andrew Whallon">Andrew Whallon</option>
-          <option value="Richard Baisz">Richard Baisz</option>
-          <option value="Gerry Baisz">Gerry Baisz</option>
-          <option value="Pravin Patel">Pravin Patel</option>
         </select>
       </div>
       <div id="addressManagerList"></div>
@@ -409,7 +405,7 @@ function completeGuidedAddress(purpose, meta, fullAddress, parts){
     document.getElementById("setAddress").value=fullAddress;
     return;
   }
-  if(purpose==="bplw"){
+  if(purpose==="bplw"||purpose==="client_addr_manager"){
     const unitPart=(parts.unit&&parts.unit.trim())?` Unit ${parts.unit.trim()}`:"";
     const display=`${(parts.street||"").trim()}${unitPart}`;
     const addr={id:"custom_"+Date.now(), display, full:fullAddress};
@@ -650,11 +646,17 @@ function loadClients(){try{return JSON.parse(localStorage.getItem("alfonso_clien
 function saveClients(){try{localStorage.setItem("alfonso_clients",JSON.stringify(savedClients));}catch(e){}}
 function addClient(c){if(!savedClients.find(x=>x.name.toLowerCase()===c.name.toLowerCase())){savedClients.push(c);saveClients();}}
 function loadIncomplete(){try{return JSON.parse(localStorage.getItem("alfonso_incomplete")||"[]");}catch(e){return[];}}
-function saveIncomplete(){try{localStorage.setItem("alfonso_incomplete",JSON.stringify(incompleteInvoices));}catch(e){}}
+function saveIncomplete(){
+  try{localStorage.setItem("alfonso_incomplete",JSON.stringify(incompleteInvoices));return true;}
+  catch(e){return false;}
+}
 function saveLaborNum(){try{localStorage.setItem("laborNum",String(laborNum));}catch(e){}}
 function saveMatNum(){try{localStorage.setItem("matNum",String(matNum));}catch(e){}}
 function loadHistory(){try{return JSON.parse(localStorage.getItem("alfonso_history")||"[]");}catch(e){return[];}}
-function saveHistory(){try{localStorage.setItem("alfonso_history",JSON.stringify(invoiceHistory));}catch(e){}}
+function saveHistory(){
+  try{localStorage.setItem("alfonso_history",JSON.stringify(invoiceHistory));return true;}
+  catch(e){return false;}
+}
 function recordInvoiceHistory(type,invNum){
   if(!invoiceData)return;
   // Avoid duplicate entries if the same invoice is shared/downloaded multiple times
@@ -1399,16 +1401,17 @@ function handlePhoto(type,event){
       // If re-encoding fails for any reason, fall back to the original photo
       // rather than blocking the user from adding it at all.
     }
+    const photoId=await savePhotoBlob(dataUrl);
     if(type==="job"){
       if(jobPhotos.length>=8){alert("Max 8 photos.");return;}
-      jobPhotos.push(dataUrl);renderJobPhotos();
+      jobPhotos.push(photoId);renderJobPhotos();
       if(pendingPhotoChipMsg){
         const msg=pendingPhotoChipMsg;pendingPhotoChipMsg=null;
         document.getElementById("userInput").value=msg;sendMsg();
       }
     }
     else{
-      receipts.push({dataUrl});renderReceipts();
+      receipts.push(photoId);renderReceipts();
       if(pendingPhotoChipMsg){
         const msg=pendingPhotoChipMsg;pendingPhotoChipMsg=null;
         document.getElementById("userInput").value=msg;sendMsg();
@@ -1417,32 +1420,33 @@ function handlePhoto(type,event){
   };
   reader.readAsDataURL(file);event.target.value="";
 }
-function renderJobPhotos(){
+async function renderJobPhotos(){
   const grid=document.getElementById("jobPhotoGrid");grid.innerHTML="";
-  jobPhotos.forEach((src,i)=>{
+  const blobs=await getPhotoBlobs(jobPhotos);
+  jobPhotos.forEach((id,i)=>{
     const wrap=document.createElement("div");wrap.className="photo-thumb-wrap";
-    const img=document.createElement("img");img.className="photo-thumb";img.src=src;
+    const img=document.createElement("img");img.className="photo-thumb";img.src=blobs[i]||"";
     const del=document.createElement("button");del.className="photo-del";del.textContent="×";
-    del.onclick=()=>{jobPhotos.splice(i,1);renderJobPhotos();};
+    del.onclick=()=>{const removedId=jobPhotos[i];jobPhotos.splice(i,1);deletePhotoBlob(removedId);renderJobPhotos();};
     wrap.appendChild(img);wrap.appendChild(del);grid.appendChild(wrap);
   });
   document.getElementById("addJobPhotoBtn").style.display=jobPhotos.length>=8?"none":"block";
 }
-function renderReceipts(){
+async function renderReceipts(){
   const list=document.getElementById("receiptList");list.innerHTML="";
-  receipts.forEach((r,i)=>{
+  const blobs=await getPhotoBlobs(receipts);
+  receipts.forEach((id,i)=>{
     const div=document.createElement("div");div.className="receipt-entry";
     const header=document.createElement("div");header.className="receipt-entry-header";
     const label=document.createElement("span");label.textContent=`Receipt ${i+1}`;
     const del=document.createElement("button");del.className="del-receipt-btn";del.textContent="Delete";
-    del.onclick=()=>{receipts.splice(i,1);renderReceipts();};
+    del.onclick=()=>{const removedId=receipts[i];receipts.splice(i,1);deletePhotoBlob(removedId);renderReceipts();};
     header.appendChild(label);header.appendChild(del);
-    const img=document.createElement("img");img.src=r.dataUrl;
+    const img=document.createElement("img");img.src=blobs[i]||"";
     img.style.cssText="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:4px;";
     div.appendChild(header);div.appendChild(img);list.appendChild(div);
   });
 }
-
 function stripMarkdown(text){return text.replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/#{1,6}\s/g,'').replace(/`([^`]+)`/g,'$1').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,'').trim();}
 function formatAIText(text){
   // Add line breaks before numbered list items
@@ -1549,6 +1553,78 @@ function reencodePhotoForConsistentOrientation(dataUrl){
     img.onerror=()=>resolve(dataUrl); // fall back to the original photo if re-encoding fails
     img.src=dataUrl;
   });
+}
+
+// Photo storage via IndexedDB instead of localStorage. localStorage has a hard ~5-10MB quota
+// shared across the whole app, and base64-encoded photos eat through that almost immediately —
+// a couple of receipt photos can silently exceed it, causing saves to fail with no error shown.
+// IndexedDB has no such small fixed ceiling (it scales with actual device storage), so photos
+// are stored there as plain dataUrl strings, referenced everywhere else by a small string ID.
+const PHOTO_DB_NAME="hablacuenta_photos";
+const PHOTO_DB_STORE="photos";
+let _photoDbPromise=null;
+function openPhotoDB(){
+  if(_photoDbPromise) return _photoDbPromise;
+  _photoDbPromise=new Promise((resolve,reject)=>{
+    if(!window.indexedDB){reject(new Error("IndexedDB not supported"));return;}
+    const req=indexedDB.open(PHOTO_DB_NAME,1);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(PHOTO_DB_STORE)) db.createObjectStore(PHOTO_DB_STORE);
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+  return _photoDbPromise;
+}
+async function savePhotoBlob(dataUrl){
+  const id="photo_"+Date.now()+"_"+Math.random().toString(36).slice(2,8);
+  try{
+    const db=await openPhotoDB();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(PHOTO_DB_STORE,"readwrite");
+      tx.objectStore(PHOTO_DB_STORE).put(dataUrl,id);
+      tx.oncomplete=()=>resolve();
+      tx.onerror=()=>reject(tx.error);
+    });
+    return id;
+  }catch(e){
+    // IndexedDB unavailable for some reason — fall back to keeping the raw dataUrl as the
+    // "id" itself. Callers treat any string starting with "data:" as already-resolved.
+    return dataUrl;
+  }
+}
+async function getPhotoBlob(id){
+  if(!id) return null;
+  if(typeof id==="object"&&id.dataUrl) return id.dataUrl; // old pre-migration shape: {dataUrl}
+  if(typeof id==="string"&&id.startsWith("data:")) return id; // fallback case: id IS the dataUrl already
+  try{
+    const db=await openPhotoDB();
+    return await new Promise((resolve,reject)=>{
+      const tx=db.transaction(PHOTO_DB_STORE,"readonly");
+      const req=tx.objectStore(PHOTO_DB_STORE).get(id);
+      req.onsuccess=()=>resolve(req.result||null);
+      req.onerror=()=>reject(req.error);
+    });
+  }catch(e){
+    return null;
+  }
+}
+async function deletePhotoBlob(id){
+  if(!id) return;
+  if(typeof id!=="string"||id.startsWith("data:")) return; // old shape or already-resolved dataUrl — nothing to clean up in IndexedDB
+  try{
+    const db=await openPhotoDB();
+    await new Promise((resolve)=>{
+      const tx=db.transaction(PHOTO_DB_STORE,"readwrite");
+      tx.objectStore(PHOTO_DB_STORE).delete(id);
+      tx.oncomplete=()=>resolve();
+      tx.onerror=()=>resolve(); // non-fatal if cleanup fails
+    });
+  }catch(e){}
+}
+async function getPhotoBlobs(ids){
+  return Promise.all((ids||[]).map(id=>getPhotoBlob(id)));
 }
 
 function formatPhone(raw){
@@ -1715,7 +1791,16 @@ function saveForLater(){
     saved_at:new Date().toISOString()
   };
   incompleteInvoices.push(entry);
-  saveIncomplete();
+  const ok=saveIncomplete();
+  if(!ok){
+    incompleteInvoices.pop();
+    addAIMsg(t(
+      "⚠️ No se pudo guardar — probablemente porque las fotos de los recibos son demasiado grandes para el almacenamiento de este dispositivo. Intenta generar el PDF ahora en su lugar.",
+      "⚠️ Couldn't save — most likely because the receipt photos are too large for this device's storage. Try generating the PDF now instead."
+    ));
+    document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
+    return;
+  }
   addAIMsg("💾 Saved! Tap 'Uncompleted invoices' at the top to come back and add more receipts.");
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
 }
@@ -1736,7 +1821,16 @@ function saveConversationForLater(){
     saved_at:new Date().toISOString()
   };
   incompleteInvoices.push(entry);
-  saveIncomplete();
+  const ok=saveIncomplete();
+  if(!ok){
+    incompleteInvoices.pop();
+    addAIMsg(t(
+      "⚠️ No se pudo guardar — probablemente porque las fotos adjuntas son demasiado grandes para el almacenamiento de este dispositivo. Intenta generar el PDF ahora en lugar de guardarlo para más tarde, o quita algunas fotos antes de guardar.",
+      "⚠️ Couldn't save — most likely because the attached photos are too large for this device's storage. Try generating the PDF now instead of saving for later, or remove some photos before saving."
+    ));
+    document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
+    return;
+  }
   document.getElementById("chipArea").innerHTML="";
   showBackBtn(false);showMidSaveBtn(false);
   addAIMsg(t(
@@ -1822,12 +1916,14 @@ async function buildPDF(type,forceNum){
     doc.text(isLabor?"TOTAL LABOR":"TOTAL MATERIALS",M,y);doc.text(fmt(total),W-M,y,{align:"right"});y+=40;
   }
 
-  const photos=isCombined?[...jobPhotos,...receipts.map(r=>r.dataUrl)]:isLabor?jobPhotos:receipts.map(r=>r.dataUrl);
+  const photoIds=isCombined?[...jobPhotos,...receipts]:isLabor?jobPhotos:receipts;
+  const photos=await getPhotoBlobs(photoIds);
   if(photos.length>0){
     doc.addPage();let py=M;
     doc.setFontSize(13);doc.setFont("helvetica","bold");doc.setTextColor(20);
     doc.text(isCombined?"Job & Receipt Photos":isLabor?"Job Photos":"Receipt Photos",M,py);py+=24;
     for(let i=0;i<photos.length;i++){
+      if(!photos[i]) continue; // skip any photo that failed to load from storage
       try{
         const img=new Image();await new Promise(res=>{img.onload=res;img.src=photos[i];});
         const ratio=img.naturalHeight/img.naturalWidth;
@@ -1913,6 +2009,14 @@ function showFormattedSummary(rawReply){
 function showAddressManager(){
   hideAllPanels();
   document.getElementById("addressManagerPanel").style.display="block";
+  const select=document.getElementById("addrClientSelect");
+  if(contractorInfo.mode==="generic"){
+    select.innerHTML=savedClients.length
+      ? savedClients.map(c=>`<option value="${c.name}">${c.name}</option>`).join("")
+      : `<option value="">No clients saved yet</option>`;
+  } else {
+    select.innerHTML=BPLW_PARTNERS.map(p=>`<option value="${p.name}">${p.name}</option>`).join("");
+  }
   renderAddressManager();
 }
 function hideAddressManager(){
@@ -1922,8 +2026,9 @@ function hideAddressManager(){
 function renderAddressManager(){
   const clientName=document.getElementById("addrClientSelect").value;
   const el=document.getElementById("addressManagerList");
-  // For Andrew, show pre-loaded + saved; for others just saved
-  const isAndrew=clientName==="Andrew Whallon";
+  if(!clientName){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">No clients saved yet. Add a client first from the "Clients" tab.</div>`;return;}
+  // For Andrew (in BPLW mode specifically), show pre-loaded + saved; for everyone else just saved
+  const isAndrew=clientName==="Andrew Whallon"&&contractorInfo.mode==="bplw";
   const saved=[];
   try{const s=JSON.parse(localStorage.getItem(getClientAddressKey(clientName))||"[]");saved.push(...s);}catch(e){}
   const preloaded=isAndrew?ANDREW_ADDRESSES:[];
@@ -2038,10 +2143,11 @@ function deleteAddress(clientName, idx){
 }
 function startAddressManagerAdd(){
   const clientName=document.getElementById("addrClientSelect").value;
+  if(!clientName){alert("Please add a client first from the \"Clients\" tab.");return;}
   currentOrderedBy=clientName;
   hideAddressManager();
   document.getElementById("chatBox").innerHTML="";
-  startGuidedAddress("bplw",{clientName});
+  startGuidedAddress(contractorInfo.mode==="generic"?"client_addr_manager":"bplw",{clientName});
 }
 
 function applyContractorInfoToHeader(){
