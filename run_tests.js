@@ -1679,6 +1679,23 @@ async function testAiConversationRespondsInSelectedLanguage() {
     /este año\s*\(\d{4}\)/i.test(sysPromptEsBoth));
 }
 
+async function testSettingsAddressButtonLabel() {
+  console.log("\n=== TEST SUITE 29: Settings Address Helper Button Label (regression for Adrian's reported ambiguous button placement) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`showSettings()`);
+  const btnText = win.document.getElementById("btnFillStepByStep").textContent;
+  check("Button text clarifies it's specifically for the address, not a generic 'fill in step by step' action",
+    btnText.includes("address"), `got: "${btnText}"`);
+
+  win.eval(`setLang('es')`);
+  const btnTextEs = win.document.getElementById("btnFillStepByStep").textContent;
+  check("Spanish version also clarifies it's for the address (dirección)",
+    btnTextEs.includes("dirección"), `got: "${btnTextEs}"`);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -1709,6 +1726,7 @@ async function testAiConversationRespondsInSelectedLanguage() {
     await testSpanishTranslationOfStaticUI();
     await testSpanishTranslationOfDynamicLists();
     await testAiConversationRespondsInSelectedLanguage();
+    await testSettingsAddressButtonLabel();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
