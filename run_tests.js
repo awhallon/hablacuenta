@@ -1022,9 +1022,9 @@ async function testCombinedLaborMaterialsInvoice() {
 
   // Test the correction menu offers both Work/Tasks AND Materials/Receipts for combined invoices
   win.eval(`showCorrectionMenu("both")`);
-  const chipArea = win.document.getElementById("chipArea").innerHTML;
-  check("Correction menu for combined invoice offers Work/Tasks option", chipArea.includes("Work") || chipArea.includes("Tasks"));
-  check("Correction menu for combined invoice offers Materials/Receipts option", chipArea.includes("Materials") || chipArea.includes("Receipts"));
+  const correctionAreaHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("Correction menu for combined invoice offers Work/Tasks option", correctionAreaHtml.includes("Work") || correctionAreaHtml.includes("Tasks"));
+  check("Correction menu for combined invoice offers Materials/Receipts option", correctionAreaHtml.includes("Materials") || correctionAreaHtml.includes("Receipts"));
 
   // Test history list correctly labels combined invoices
   win.eval(`
@@ -1986,6 +1986,246 @@ async function testFormatUnitNormalization() {
     `save1: "${savedAddress}", save2: "${afterSecondSave}", save3: "${afterThirdSave}"`);
 }
 
+async function testInlineCorrectionEditorFieldSelector() {
+  console.log("\n=== TEST SUITE 33: Inline Correction Editor — Field Selector (Option 1 rebuild) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`
+    contractorInfo.mode = "bplw";
+    invoiceType = "both";
+    invoiceData = {
+      done:true, bill_to_name:"BPLW Management", bill_to_address:"PO Box 9395, Long Beach CA 90810", bill_to_email:"x", bill_to_phone:"",
+      ordered_by:"Andrew Whallon", job_address:"1995 Canal Ave, Long Beach CA 90810",
+      work_items:[{desc:"Replace water heater",amount:700},{desc:"Replace damaged pipes",amount:150},{desc:"Install new hoses",amount:50}],
+      materials_items:[{vendor:"Home Depot",desc:"Plumbing materials",date:"May 23, 2026",amount:115.51}],
+      date:"May 23, 2026", has_materials:true, has_labor:true
+    };
+    document.getElementById("photoSections").style.display="block";
+    document.getElementById("receiptSection").style.display="block";
+    showInvoicePreview(invoiceData);
+  `);
+
+  // Tapping "Something needs correcting" must render the menu INLINE in invoiceArea, not chipArea
+  win.eval(`showCorrectionMenu("both")`);
+  const menuHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("Correction menu renders inline in invoiceArea (not the chat/chip area)",
+    menuHtml.includes("What needs to be corrected") || menuHtml.includes("Qué necesita corrección"));
+  check("Field selector offers Partner/Client", menuHtml.includes("Partner") || menuHtml.includes("Socio"));
+  check("Field selector offers Job Address", menuHtml.includes("Job Address") || menuHtml.includes("Dirección del Trabajo"));
+  check("Field selector offers Date", menuHtml.includes(">Date<") || menuHtml.includes(">Fecha<") || menuHtml.includes("✏️ Date") || menuHtml.includes("✏️ Fecha"));
+  check("Field selector offers Work/Tasks for a combined invoice", menuHtml.includes("Work") || menuHtml.includes("Trabajo"));
+  check("Field selector offers Materials/Receipts for a combined invoice", menuHtml.includes("Materials") || menuHtml.includes("Materiales"));
+  check("A Cancel button is present", menuHtml.includes("Cancel") || menuHtml.includes("Cancelar"));
+
+  // Cancel should return to the normal invoice preview, not leave the menu showing
+  const cancelMatch=menuHtml.match(/onclick="(showInvoicePreview\(invoiceData\))"/);
+  check("Cancel button calls showInvoicePreview to return to the normal view", !!cancelMatch);
+
+  // The field selector for a labor-only invoice should NOT offer Materials/Receipts
+  win.eval(`invoiceType = "labor"; showCorrectionMenu("labor");`);
+  const laborMenuHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("Labor-only correction menu does NOT offer Materials/Receipts",
+    !laborMenuHtml.includes("Materials / Receipts") && !laborMenuHtml.includes("Materiales / Recibos"));
+}
+
+async function testInlineCorrectionEditorSimpleFields() {
+  console.log("\n=== TEST SUITE 34: Inline Correction Editor — Date, Job Address, Partner/Client (direct editing, no AI round-trip) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`
+    contractorInfo.mode = "bplw";
+    invoiceType = "labor";
+    invoiceData = {
+      done:true, bill_to_name:"BPLW Management", bill_to_address:"PO Box 9395, Long Beach CA 90810", bill_to_email:"x", bill_to_phone:"",
+      ordered_by:"Andrew Whallon", job_address:"1995 Canal Ave, Long Beach CA 90810",
+      work_items:[{desc:"Task A",amount:100}], materials_items:[],
+      date:"May 23, 2026", has_materials:false, has_labor:true
+    };
+    showInvoicePreview(invoiceData);
+  `);
+
+  // DATE: pre-filled input, direct edit, no AI conversation involved
+  win.eval(`showCorrectionMenu("labor")`);
+  win.eval(`showFieldEditor("date")`);
+  const dateEditorHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("Date editor pre-fills the input with the current date value", dateEditorHtml.includes('value="May 23, 2026"'));
+  win.eval(`document.getElementById("editFieldInput").value = "June 1, 2026"; saveFieldEdit("date");`);
+  check("Saving a corrected date updates invoiceData.date directly, with no AI message exchange",
+    win.eval('invoiceData.date') === "June 1, 2026");
+  check("No new messages were pushed to the AI conversation for this direct edit",
+    win.eval('messages.length') === 0);
+
+  // Date validation: missing year should be rejected, same protection as the original flow
+  let alertShown = false;
+  win.window = win; // ensure alert is interceptable
+  win.alert = () => { alertShown = true; };
+  win.eval(`showCorrectionMenu("labor")`);
+  win.eval(`showFieldEditor("date")`);
+  win.eval(`document.getElementById("editFieldInput").value = "May 5"; saveFieldEdit("date");`);
+  check("Saving a date missing a year is rejected (validation still applies in direct-edit mode)",
+    win.eval('invoiceData.date') === "June 1, 2026", "date should NOT have changed to the invalid value");
+
+  // JOB ADDRESS: pre-filled input, direct edit
+  win.eval(`showCorrectionMenu("labor")`);
+  win.eval(`showFieldEditor("job_address")`);
+  const addrEditorHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("Job address editor pre-fills the input with the current address", addrEditorHtml.includes("1995 Canal Ave"));
+  win.eval(`document.getElementById("editFieldInput").value = "123 New St, Long Beach CA 90810"; saveFieldEdit("job_address");`);
+  check("Saving a corrected job address updates invoiceData.job_address directly",
+    win.eval('invoiceData.job_address') === "123 New St, Long Beach CA 90810");
+
+  // PARTNER/CLIENT: picker pre-selects the current value, can pick a different known partner
+  win.eval(`showCorrectionMenu("labor")`);
+  win.eval(`showFieldEditor("ordered_by")`);
+  const partnerEditorHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("Partner picker shows all BPLW partners as options", partnerEditorHtml.includes("Richard Baisz") && partnerEditorHtml.includes("Andrew Whallon"));
+  check("Partner picker pre-selects the currently-assigned partner",
+    /edit-partner-row selected" data-name="Andrew Whallon"/.test(partnerEditorHtml));
+  win.eval(`document.querySelector('[data-name="Richard Baisz"]').click()`);
+  win.eval(`saveFieldEdit("ordered_by")`);
+  check("Selecting a different partner and saving updates invoiceData.ordered_by",
+    win.eval('invoiceData.ordered_by') === "Richard Baisz");
+
+  // PARTNER/CLIENT: custom free-text fallback for a one-off name not in the known list
+  win.eval(`showCorrectionMenu("labor")`);
+  win.eval(`showFieldEditor("ordered_by")`);
+  win.eval(`document.getElementById("editPartnerCustom").value = "Someone One-Off"; saveFieldEdit("ordered_by");`);
+  check("Typing a custom name not in the known partner list is accepted and saved",
+    win.eval('invoiceData.ordered_by') === "Someone One-Off");
+
+  // Confirm after any save, the view returns to the normal invoice preview (not stuck in edit mode)
+  const finalHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("After saving a field edit, the view returns to the normal invoice preview",
+    finalHtml.includes("invoice-preview") && !finalHtml.includes("editFieldInput"));
+}
+
+async function testInlineCorrectionEditorLineItems() {
+  console.log("\n=== TEST SUITE 35: Inline Correction Editor — Work/Tasks and Materials/Receipts (editable line items) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`
+    contractorInfo.mode = "generic";
+    invoiceType = "both";
+    invoiceData = {
+      done:true, bill_to_name:"Test Client", bill_to_address:"x", bill_to_email:"x", bill_to_phone:"",
+      ordered_by:"", job_address:"123 Main St",
+      work_items:[{desc:"Replace water heater",amount:700},{desc:"Replace damaged pipes",amount:150},{desc:"Install new hoses",amount:50}],
+      materials_items:[{vendor:"Home Depot",desc:"Plumbing materials",date:"May 23, 2026",amount:115.51}],
+      date:"May 23, 2026", has_materials:true, has_labor:true
+    };
+    document.getElementById("photoSections").style.display="block";
+    document.getElementById("receiptSection").style.display="block";
+    showInvoicePreview(invoiceData);
+  `);
+
+  // WORK ITEMS: editing just ONE line should not require re-entering the others (the core
+  // repetition problem this whole rebuild exists to solve)
+  win.eval(`showCorrectionMenu("both")`);
+  win.eval(`showFieldEditor("work_items")`);
+  const workEditorHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("Work items editor shows all three existing tasks as separate editable rows",
+    (workEditorHtml.match(/edit-line-row/g)||[]).length === 3);
+  check("Each existing task's description and amount are pre-filled", workEditorHtml.includes("Replace water heater") && workEditorHtml.includes('value="700"'));
+
+  // Correct just the water heater price, leave the other two untouched
+  win.eval(`
+    const rows = document.querySelectorAll("#editLineItems .edit-line-row");
+    rows[0].querySelector(".ln-amt").value = "750";
+    saveFieldEdit("work_items");
+  `);
+  const updatedWorkItems = JSON.parse(win.eval('JSON.stringify(invoiceData.work_items)'));
+  check("Editing one task's price updates ONLY that task, without needing to re-enter the others",
+    updatedWorkItems.length === 3 && updatedWorkItems[0].amount === 750 && updatedWorkItems[1].desc === "Replace damaged pipes" && updatedWorkItems[2].desc === "Install new hoses");
+  check("This entire correction required zero AI conversation messages",
+    win.eval('messages.length') === 0);
+
+  // Deleting a row
+  win.eval(`showCorrectionMenu("both")`);
+  win.eval(`showFieldEditor("work_items")`);
+  win.eval(`
+    const rows = document.querySelectorAll("#editLineItems .edit-line-row");
+    deleteEditLineRow(rows[1].querySelector(".edit-line-del"));
+    saveFieldEdit("work_items");
+  `);
+  const afterDelete = JSON.parse(win.eval('JSON.stringify(invoiceData.work_items)'));
+  check("Deleting one row removes only that task, keeping the others intact",
+    afterDelete.length === 2 && afterDelete.find(i=>i.desc==="Replace damaged pipes") === undefined);
+
+  // Adding a new row
+  win.eval(`showCorrectionMenu("both")`);
+  win.eval(`showFieldEditor("work_items")`);
+  win.eval(`addEditLineRow("work")`);
+  win.eval(`
+    const rows = document.querySelectorAll("#editLineItems .edit-line-row");
+    const lastRow = rows[rows.length-1];
+    lastRow.querySelector(".ln-desc").value = "New extra task";
+    lastRow.querySelector(".ln-amt").value = "99";
+    saveFieldEdit("work_items");
+  `);
+  const afterAdd = JSON.parse(win.eval('JSON.stringify(invoiceData.work_items)'));
+  check("Adding a new row and saving includes the new task alongside the existing ones",
+    afterAdd.length === 3 && afterAdd.find(i=>i.desc==="New extra task"&&i.amount===99));
+
+  // Cannot save an empty task list
+  win.eval(`showCorrectionMenu("both")`);
+  win.eval(`showFieldEditor("work_items")`);
+  let alertCalled = false;
+  win.alert = () => { alertCalled = true; };
+  win.eval(`
+    document.querySelectorAll("#editLineItems .edit-line-row").forEach(row => deleteEditLineRow(row.querySelector(".edit-line-del")));
+    saveFieldEdit("work_items");
+  `);
+  check("Attempting to save with zero tasks is rejected (at least one task required)", alertCalled === true);
+
+  // MATERIALS: same single-row-edit behavior, with the extra vendor/date fields
+  win.eval(`showCorrectionMenu("both")`);
+  win.eval(`showFieldEditor("materials_items")`);
+  const matEditorHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("Materials editor shows the existing receipt as an editable row with vendor, description, date, and amount fields",
+    matEditorHtml.includes("Home Depot") && matEditorHtml.includes("Plumbing materials") && matEditorHtml.includes("May 23, 2026") && matEditorHtml.includes('value="115.51"'));
+
+  win.eval(`
+    const row = document.querySelector("#editLineItems .edit-line-row");
+    row.querySelector(".ln-amt").value = "120.00";
+    saveFieldEdit("materials_items");
+  `);
+  check("Editing a material receipt's amount updates it correctly",
+    win.eval('invoiceData.materials_items[0].amount') === 120);
+
+  // Materials items CAN be saved as an empty list (unlike work_items) — removing all receipts is valid
+  win.eval(`showCorrectionMenu("both")`);
+  win.eval(`showFieldEditor("materials_items")`);
+  win.eval(`
+    document.querySelectorAll("#editLineItems .edit-line-row").forEach(row => deleteEditLineRow(row.querySelector(".edit-line-del")));
+    saveFieldEdit("materials_items");
+  `);
+  check("Materials list can be saved empty (removing all receipts is allowed, unlike tasks)",
+    win.eval('invoiceData.materials_items.length') === 0);
+
+  // Date validation also applies inside the materials line-item editor
+  win.eval(`showCorrectionMenu("both")`);
+  win.eval(`showFieldEditor("materials_items")`);
+  win.eval(`addEditLineRow("materials")`);
+  let materialsAlertCalled = false;
+  win.alert = () => { materialsAlertCalled = true; };
+  win.eval(`
+    const row = document.querySelector("#editLineItems .edit-line-row");
+    row.querySelector(".ln-vendor").value = "Test Vendor";
+    row.querySelector(".ln-desc").value = "Test Item";
+    row.querySelector(".ln-date").value = "May 5";
+    row.querySelector(".ln-amt").value = "10";
+    saveFieldEdit("materials_items");
+  `);
+  check("A material receipt date missing a year is rejected by the same validation used elsewhere",
+    materialsAlertCalled === true);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2021,6 +2261,9 @@ async function testFormatUnitNormalization() {
     await testFirstTimeWelcomeAndOnboarding();
     await testDualLanguageToggle();
     await testFormatUnitNormalization();
+    await testInlineCorrectionEditorFieldSelector();
+    await testInlineCorrectionEditorSimpleFields();
+    await testInlineCorrectionEditorLineItems();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
