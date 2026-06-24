@@ -239,13 +239,13 @@ input[type=file]{display:none;}
         <h4 id="jobPhotoTitle">Job Photos (optional, max 8)</h4>
         <div class="photo-grid" id="jobPhotoGrid"></div>
         <button class="add-photo-btn" id="addJobPhotoBtn" onclick="triggerPhoto('job')">+ Add job photo</button>
-        <input type="file" id="jobPhotoInput" accept="image/*" capture="environment" onchange="handlePhoto('job',event)"/>
+        <input type="file" id="jobPhotoInput" accept="image/*" onchange="handlePhoto('job',event)"/>
       </div>
       <div class="photo-section" id="receiptSection" style="display:none;">
         <h4 id="receiptPhotoTitle">Receipt Photos</h4>
         <div id="receiptList"></div>
         <button class="add-photo-btn" id="addReceiptBtn" onclick="triggerPhoto('receipt')">+ Add receipt photo</button>
-        <input type="file" id="receiptPhotoInput" accept="image/*" capture="environment" onchange="handlePhoto('receipt',event)"/>
+        <input type="file" id="receiptPhotoInput" accept="image/*" onchange="handlePhoto('receipt',event)"/>
       </div>
     </div>
     <div id="invoiceArea"></div>
