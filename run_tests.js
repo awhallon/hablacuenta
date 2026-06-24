@@ -170,7 +170,10 @@ async function testGenericMode() {
   win.document.getElementById("setFirstName").value = "Adrian";
   win.document.getElementById("setLastName").value = "Quintana";
   win.document.getElementById("setBusinessName").value = "";
-  win.document.getElementById("setAddress").value = "1952 Caspian Avenue, Long Beach CA";
+  win.document.getElementById("setStreet").value = "1952 Caspian Avenue";
+  win.document.getElementById("setCity").value = "Long Beach";
+  win.document.getElementById("setState").value = "CA";
+  win.document.getElementById("setZip").value = "90810";
   win.document.getElementById("setPhone").value = "555-1212";
   win.document.getElementById("setMode").value = "generic";
   win.eval('saveSettingsForm()');
@@ -683,24 +686,6 @@ async function testUnifiedAddressBplwAndContractorPurposes() {
   // Confirm this doesn't affect Andrew Whallon's separate preloaded address list
   const andrewAddrs = JSON.parse(win.eval(`JSON.stringify(getClientAddresses("Andrew Whallon"))`));
   check("Andrew Whallon's preloaded addresses remain untouched", andrewAddrs.length > 0);
-
-  // Contractor Settings purpose
-  const dom2 = freshDom();
-  const win2 = dom2.window;
-  await wait(300);
-  win2.eval(`startGuidedAddress("contractor")`);
-  check("Contractor purpose stored on guidedAddrState", win2.eval('guidedAddrState.purpose') === "contractor");
-
-  win2.eval(`document.getElementById("userInput").value = "42 Workshop Way"; sendMsg();`);
-  win2.eval(`document.getElementById("userInput").value = "No"; sendMsg();`);
-  win2.eval(`document.getElementById("userInput").value = "Riverside"; sendMsg();`);
-  win2.eval(`document.getElementById("userInput").value = "CA"; sendMsg();`);
-  win2.eval(`document.getElementById("userInput").value = "92501"; sendMsg();`);
-  check("guidedAddrState cleared after contractor address completes", win2.eval('guidedAddrState') === null);
-
-  const settingsAddrValue = win2.document.getElementById("setAddress").value;
-  check("Contractor address field populated with the built address", settingsAddrValue.includes("42 Workshop Way") && settingsAddrValue.includes("Riverside"));
-  check("Settings panel is shown after contractor address completes", win2.document.getElementById("settingsPanel").style.display === "block");
 
   // Confirm the BPLW legacy edit_field path (Address Manager single-field correction) still works independently
   const dom3 = freshDom();
@@ -1698,21 +1683,100 @@ async function testAiConversationRespondsInSelectedLanguage() {
     /este año\s*\(\d{4}\)/i.test(sysPromptEsBoth));
 }
 
-async function testSettingsAddressButtonLabel() {
-  console.log("\n=== TEST SUITE 29: Settings Address Helper Button Label (regression for Adrian's reported ambiguous button placement) ===");
+async function testSettingsSeparateAddressFields() {
+  console.log("\n=== TEST SUITE 29: Settings Separate Address Fields (replacing the step-by-step interview) ===");
   const dom = freshDom();
   const win = dom.window;
   await wait(300);
 
-  win.eval(`showSettings()`);
-  const btnText = win.document.getElementById("btnFillStepByStep").textContent;
-  check("Button text clarifies it's specifically for the address, not a generic 'fill in step by step' action",
-    btnText.includes("address"), `got: "${btnText}"`);
+  // The old step-by-step button and single address field must be gone entirely
+  check("The old single 'setAddress' field no longer exists", win.document.getElementById("setAddress") === null);
+  check("The old 'Fill in step by step' button no longer exists", win.document.getElementById("btnFillStepByStep") === null);
 
+  // The five separate fields must exist
+  ["setStreet","setUnit","setCity","setState","setZip"].forEach(id => {
+    check(`Separate address field #${id} exists in Settings`, win.document.getElementById(id) !== null);
+  });
+
+  // Filling in the five fields and saving should combine them into one stored address string
+  win.eval(`showSettings()`);
+  win.document.getElementById("setFirstName").value = "Test";
+  win.document.getElementById("setStreet").value = "100 Test St";
+  win.document.getElementById("setUnit").value = "5B";
+  win.document.getElementById("setCity").value = "Riverside";
+  win.document.getElementById("setState").value = "CA";
+  win.document.getElementById("setZip").value = "92501";
+  win.eval(`saveSettingsForm()`);
+  const savedAddress = win.eval('contractorInfo.address');
+  check("Saving combines the five fields into one address string", savedAddress.includes("100 Test St") && savedAddress.includes("5B") && savedAddress.includes("Riverside") && savedAddress.includes("CA") && savedAddress.includes("92501"));
+
+  // Re-opening Settings should split the saved address back into the five fields correctly
+  win.eval(`showSettings()`);
+  check("Re-opening Settings correctly re-populates Street", win.document.getElementById("setStreet").value === "100 Test St");
+  check("Re-opening Settings correctly re-populates Unit", win.document.getElementById("setUnit").value === "5B");
+  check("Re-opening Settings correctly re-populates City", win.document.getElementById("setCity").value === "Riverside");
+  check("Re-opening Settings correctly re-populates State", win.document.getElementById("setState").value === "CA");
+  check("Re-opening Settings correctly re-populates Zip", win.document.getElementById("setZip").value === "92501");
+
+  // No unit entered should round-trip cleanly with an empty unit field, not a stray "Unit" string
+  win.document.getElementById("setUnit").value = "";
+  win.eval(`saveSettingsForm()`);
+  win.eval(`showSettings()`);
+  check("An address with no unit round-trips with an empty unit field", win.document.getElementById("setUnit").value === "");
+
+  // Spanish field labels
   win.eval(`setLang('es')`);
-  const btnTextEs = win.document.getElementById("btnFillStepByStep").textContent;
-  check("Spanish version also clarifies it's for the address (dirección)",
-    btnTextEs.includes("dirección"), `got: "${btnTextEs}"`);
+  check("Street label translates to Spanish", win.document.getElementById("lblStreet").textContent === "Dirección de la Calle");
+  check("City label translates to Spanish", win.document.getElementById("lblCity").textContent === "Ciudad");
+  check("State label translates to Spanish", win.document.getElementById("lblState").textContent === "Estado");
+  check("Zip label translates to Spanish", win.document.getElementById("lblZip").textContent === "Código Postal");
+}
+
+async function testAddressParsingAndBuilding() {
+  console.log("\n=== TEST SUITE 30: Address Parsing and Building Helpers (regression coverage for real saved address shapes) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // buildAddressFromParts: the inverse operation, used when saving
+  const built = win.eval(`buildAddressFromParts("310 Main Ave", "1", "Long Beach", "CA", "90802")`);
+  check("buildAddressFromParts produces a correctly combined address with a unit", built.includes("310 Main Ave") && built.includes("Unit 1") && built.includes("Long Beach") && built.includes("CA") && built.includes("90802"));
+
+  const builtNoUnit = win.eval(`buildAddressFromParts("310 Main Ave", "", "Long Beach", "CA", "90802")`);
+  check("buildAddressFromParts omits 'Unit' entirely when no unit is given", !builtNoUnit.includes("Unit"));
+
+  // parseAddressIntoParts: real address shapes that actually exist in this app's data
+  const case1 = JSON.parse(win.eval(`JSON.stringify(parseAddressIntoParts("1001 Cherry Ave Unit 102, Long Beach CA 90813"))`));
+  check("Parses a standard comma-separated address with a 2-letter state and unit",
+    case1.street === "1001 Cherry Ave" && case1.unit === "102" && case1.city === "Long Beach" && case1.state === "CA" && case1.zip === "90813");
+
+  const case2 = JSON.parse(win.eval(`JSON.stringify(parseAddressIntoParts("1995 Canal Avenue, Long Beach California 90810"))`));
+  check("Parses an address using the full state name instead of an abbreviation",
+    case2.street === "1995 Canal Avenue" && case2.city === "Long Beach" && case2.state === "California" && case2.zip === "90810");
+
+  // Adrian's actual real saved address shape: no comma at all
+  const case3 = JSON.parse(win.eval(`JSON.stringify(parseAddressIntoParts("1952 Caspian Avenue Long Beach California 90810"))`));
+  check("Parses a real no-comma address (Adrian's actual saved format) without losing the city/state/zip",
+    case3.street === "1952 Caspian Avenue" && case3.city === "Long Beach" && case3.state === "California" && case3.zip === "90810",
+    `got: ${JSON.stringify(case3)}`);
+
+  const case4 = JSON.parse(win.eval(`JSON.stringify(parseAddressIntoParts(""))`));
+  check("Parsing an empty address returns all-blank parts without crashing",
+    case4.street === "" && case4.city === "" && case4.state === "" && case4.zip === "");
+
+  const case5 = JSON.parse(win.eval(`JSON.stringify(parseAddressIntoParts("123 Some Street"))`));
+  check("A street-only address with no parseable city/state/zip falls back to putting everything in street, without losing data",
+    case5.street === "123 Some Street");
+
+  // Round-trip: parse then rebuild should reconstruct an equivalent address
+  const roundTrip = win.eval(`
+    (function(){
+      const parts = parseAddressIntoParts("1001 Cherry Ave Unit 102, Long Beach CA 90813");
+      return buildAddressFromParts(parts.street, parts.unit, parts.city, parts.state, parts.zip);
+    })()
+  `);
+  check("Parsing then rebuilding an address reconstructs an equivalent string",
+    roundTrip.includes("1001 Cherry Ave") && roundTrip.includes("102") && roundTrip.includes("Long Beach") && roundTrip.includes("CA") && roundTrip.includes("90813"));
 }
 
 async function testFirstTimeWelcomeAndOnboarding() {
@@ -1876,7 +1940,8 @@ async function testDualLanguageToggle() {
     await testSpanishTranslationOfStaticUI();
     await testSpanishTranslationOfDynamicLists();
     await testAiConversationRespondsInSelectedLanguage();
-    await testSettingsAddressButtonLabel();
+    await testSettingsSeparateAddressFields();
+    await testAddressParsingAndBuilding();
     await testFirstTimeWelcomeAndOnboarding();
     await testDualLanguageToggle();
   } catch (e) {
