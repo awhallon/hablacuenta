@@ -2226,6 +2226,20 @@ async function testInlineCorrectionEditorLineItems() {
     materialsAlertCalled === true);
 }
 
+async function testPhotoInputAllowsGallerySelection() {
+  console.log("\n=== TEST SUITE 36: Photo Input Allows Gallery Selection (regression for Adrian's reported camera-only bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const jobInput = win.document.getElementById("jobPhotoInput");
+  const receiptInput = win.document.getElementById("receiptPhotoInput");
+  check("Job photo input no longer forces camera-only capture", !jobInput.hasAttribute("capture"));
+  check("Receipt photo input no longer forces camera-only capture", !receiptInput.hasAttribute("capture"));
+  check("Job photo input still restricts to image files", jobInput.getAttribute("accept") === "image/*");
+  check("Receipt photo input still restricts to image files", receiptInput.getAttribute("accept") === "image/*");
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2264,6 +2278,7 @@ async function testInlineCorrectionEditorLineItems() {
     await testInlineCorrectionEditorFieldSelector();
     await testInlineCorrectionEditorSimpleFields();
     await testInlineCorrectionEditorLineItems();
+    await testPhotoInputAllowsGallerySelection();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
