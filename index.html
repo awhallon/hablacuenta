@@ -167,8 +167,22 @@ input[type=file]{display:none;}
       <label id="lblBusinessName" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Business Name (shown on invoices — leave blank to use your first/last name)</label>
       <input id="setBusinessName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
       <label id="lblAddress" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Address</label>
-      <input id="setAddress" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:6px;">
-      <button type="button" class="text-btn" id="btnFillStepByStep" style="margin-top:0;margin-bottom:12px;" onclick="startSettingsGuidedAddress()">📍 Fill in address step by step</button>
+      <label id="lblStreet" style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Street Address</label>
+      <input id="setStreet" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:10px;">
+      <label id="lblUnit" style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Unit / Suite (optional)</label>
+      <input id="setUnit" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:10px;">
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div style="flex:2;">
+          <label id="lblCity" style="font-size:11px;color:#888;display:block;margin-bottom:3px;">City</label>
+          <input id="setCity" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;">
+        </div>
+        <div style="flex:1;">
+          <label id="lblState" style="font-size:11px;color:#888;display:block;margin-bottom:3px;">State</label>
+          <input id="setState" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;">
+        </div>
+      </div>
+      <label id="lblZip" style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Zip Code</label>
+      <input id="setZip" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:16px;">
       <label id="lblPhone" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Phone</label>
       <input id="setPhone" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:16px;">
       <label id="lblBillingSetup" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Billing Setup</label>
@@ -428,12 +442,6 @@ function completeGuidedAddress(purpose, meta, fullAddress, parts){
     }
     return;
   }
-  if(purpose==="contractor"){
-    addAIMsg(t(`Dirección guardada: ${fullAddress}. Revisa y guarda en Configuración.`,`Address saved: ${fullAddress}. Review and save it on the Settings screen.`));
-    showSettings();
-    document.getElementById("setAddress").value=fullAddress;
-    return;
-  }
   if(purpose==="bplw"||purpose==="client_addr_manager"){
     const unitPart=(parts.unit&&parts.unit.trim())?` Unit ${parts.unit.trim()}`:"";
     const display=`${(parts.street||"").trim()}${unitPart}`;
@@ -628,6 +636,53 @@ function handleNewAddressInput(text){
 }
 
 const DEFAULT_CONTRACTOR_INFO={firstName:"",lastName:"",businessName:"",address:"",phone:"",mode:"generic"};
+// Splits a combined address string (e.g. "310 Main Ave Unit 1, Long Beach CA 90802") into
+// its component parts for display in separate Settings fields. The underlying storage format
+// (contractorInfo.address as one string) is unchanged — this is purely a UI-layer convenience,
+// so every other place that reads contractorInfo.address keeps working without modification.
+function parseAddressIntoParts(full){
+  if(!full) return {street:"",unit:"",city:"",state:"",zip:""};
+  const parts=full.split(",");
+  let streetPart=(parts[0]||"").trim();
+  let cityStateZipPart=(parts[1]||"").trim();
+  // No comma in the address at all (e.g. "1952 Caspian Avenue Long Beach California 90810") —
+  // try to pull a trailing "City State Zip" pattern off the end of the whole string instead.
+  if(!cityStateZipPart){
+    // Anchor the street portion on a leading house number for confidence — avoids ambiguity
+    // about where a multi-word street name ends and the city begins when there's no comma
+    // separating them (e.g. "1952 Caspian Avenue Long Beach California 90810").
+    const wholeMatch=streetPart.match(/^(\d+\s+.+?)\s+([A-Za-z]+(?:\s[A-Za-z]+)?)\s+([A-Za-z]{2}|[A-Za-z]{3,})\s+(\d{5}(?:-\d{4})?)$/);
+    if(wholeMatch){
+      const unitMatch1=wholeMatch[1].match(/\bUnit\s+(.+)$/i);
+      const unit=unitMatch1?unitMatch1[1].trim():"";
+      const street=unitMatch1?wholeMatch[1].slice(0,unitMatch1.index).trim():wholeMatch[1].trim();
+      return {street,unit,city:wholeMatch[2].trim(),state:wholeMatch[3].trim(),zip:wholeMatch[4].trim()};
+    }
+  }
+  const unitMatch=streetPart.match(/\bUnit\s+(.+)$/i);
+  const unit=unitMatch?unitMatch[1].trim():"";
+  const street=unitMatch?streetPart.slice(0,unitMatch.index).trim():streetPart;
+  // Try a 2-letter state code first (e.g. "Long Beach CA 90802")...
+  let cszMatch=cityStateZipPart.match(/^(.*?)\s+([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+  if(cszMatch){
+    return {street,unit,city:cszMatch[1].trim(),state:cszMatch[2].trim(),zip:cszMatch[3].trim()};
+  }
+  // ...then fall back to a full state name (e.g. "Long Beach California 90802"), since some
+  // existing saved addresses were entered that way before this split-field UI existed.
+  cszMatch=cityStateZipPart.match(/^(.*?)\s+([A-Za-z]{3,})\s+(\d{5}(?:-\d{4})?)$/);
+  if(cszMatch){
+    return {street,unit,city:cszMatch[1].trim(),state:cszMatch[2].trim(),zip:cszMatch[3].trim()};
+  }
+  // Couldn't confidently parse city/state/zip — put everything into city rather than
+  // silently dropping it, so no previously-entered data ever disappears.
+  return {street,unit,city:cityStateZipPart,state:"",zip:""};
+}
+function buildAddressFromParts(street,unit,city,state,zip){
+  const unitPart=unit.trim()?` Unit ${unit.trim()}`:"";
+  const cityStateZip=[city,state,zip].filter(Boolean).join(state||zip?" ":", ");
+  return [`${street.trim()}${unitPart}`,cityStateZip].filter(Boolean).join(", ");
+}
+
 function contractorDisplayName(info){
   const full=[info.firstName,info.lastName].filter(Boolean).join(" ").trim();
   return info.businessName||full||t("Hablacuenta","Hablacuenta");
@@ -819,7 +874,11 @@ function applyStaticTranslations(){
   set("lblLastName","Apellido","Last Name");
   set("lblBusinessName","Nombre del Negocio (se muestra en las facturas — déjalo en blanco para usar tu nombre y apellido)","Business Name (shown on invoices — leave blank to use your first/last name)");
   set("lblAddress","Dirección","Address");
-  set("btnFillStepByStep","📍 Completar la dirección paso a paso","📍 Fill in address step by step");
+  set("lblStreet","Dirección de la Calle","Street Address");
+  set("lblUnit","Unidad / Suite (opcional)","Unit / Suite (optional)");
+  set("lblCity","Ciudad","City");
+  set("lblState","Estado","State");
+  set("lblZip","Código Postal","Zip Code");
   set("lblPhone","Teléfono","Phone");
   set("lblBillingSetup","Configuración de Facturación","Billing Setup");
   set("optBplw","BPLW Management (socios y propiedades compartidas)","BPLW Management (partners & shared properties)");
@@ -900,7 +959,12 @@ function showSettings(){
   document.getElementById("setFirstName").value=contractorInfo.firstName||"";
   document.getElementById("setLastName").value=contractorInfo.lastName||"";
   document.getElementById("setBusinessName").value=contractorInfo.businessName||"";
-  document.getElementById("setAddress").value=contractorInfo.address;
+  const parts=parseAddressIntoParts(contractorInfo.address);
+  document.getElementById("setStreet").value=parts.street;
+  document.getElementById("setUnit").value=parts.unit;
+  document.getElementById("setCity").value=parts.city;
+  document.getElementById("setState").value=parts.state;
+  document.getElementById("setZip").value=parts.zip;
   document.getElementById("setPhone").value=contractorInfo.phone;
   document.getElementById("setMode").value=contractorInfo.mode||"bplw";
   document.getElementById("settingsSavedMsg").style.display="none";
@@ -909,16 +973,16 @@ function hideSettings(){
   document.getElementById("settingsPanel").style.display="none";
   document.getElementById("mainPanel").style.display="block";
 }
-function startSettingsGuidedAddress(){
-  hideAllPanels();
-  document.getElementById("mainPanel").style.display="block";
-  startGuidedAddress("contractor");
-}
 function saveSettingsForm(){
   const firstName=document.getElementById("setFirstName").value.trim();
   const lastName=document.getElementById("setLastName").value.trim();
   const businessName=document.getElementById("setBusinessName").value.trim();
-  const address=document.getElementById("setAddress").value.trim();
+  const street=document.getElementById("setStreet").value.trim();
+  const unit=document.getElementById("setUnit").value.trim();
+  const city=document.getElementById("setCity").value.trim();
+  const state=document.getElementById("setState").value.trim();
+  const zip=document.getElementById("setZip").value.trim();
+  const address=buildAddressFromParts(street,unit,city,state,zip);
   const phone=formatPhone(document.getElementById("setPhone").value.trim());
   const mode=document.getElementById("setMode").value;
   if(!firstName){alert(t("Se requiere el nombre.","First name is required."));return;}
