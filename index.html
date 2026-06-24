@@ -76,6 +76,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .save-btn{width:100%;margin-top:8px;padding:12px;border-radius:12px;border:1.5px solid #9CA3AF;background:#F9FAFB;color:#374151;cursor:pointer;font-size:14px;font-weight:600;}
 .new-invoice-btn{width:100%;margin-top:1.5rem;padding:14px;border-radius:12px;border:none;background:#111;color:#fff;cursor:pointer;font-size:15px;font-weight:600;}
 .correct-btn{width:100%;margin-top:8px;padding:10px;border-radius:12px;border:1.5px solid #F59E0B;background:#FFFBEB;color:#92400E;cursor:pointer;font-size:13px;font-weight:500;}
+.edit-field-section{margin-top:14px;}
+.edit-field-input{width:100%;padding:9px;border-radius:8px;border:1px solid #E5E7EB;font-size:13px;margin-top:4px;}
+.edit-line-row{display:flex;gap:6px;align-items:center;margin-top:6px;}
+.edit-line-row input{padding:8px;border-radius:8px;border:1px solid #E5E7EB;font-size:13px;}
+.edit-line-row .ln-desc{flex:3;}
+.edit-line-row .ln-vendor{flex:2;}
+.edit-line-row .ln-date{flex:2;}
+.edit-line-row .ln-amt{flex:1;min-width:0;}
+.edit-line-del{background:none;border:none;color:#DC2626;font-size:18px;cursor:pointer;padding:4px 6px;flex-shrink:0;}
+.edit-add-row-btn{width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1.5px dashed #9CA3AF;background:transparent;color:#6B7280;cursor:pointer;font-size:13px;}
+.edit-save-btn{width:100%;margin-top:14px;padding:12px;border-radius:12px;border:1.5px solid #1D9E75;background:#F0FDF9;color:#0F6E56;cursor:pointer;font-size:14px;font-weight:600;}
+.edit-cancel-btn{width:100%;margin-top:8px;padding:10px;border-radius:12px;border:1.5px solid #E5E7EB;background:#fff;color:#6B7280;cursor:pointer;font-size:13px;}
+.edit-partner-row{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;border:1px solid #E5E7EB;margin-top:4px;cursor:pointer;}
+.edit-partner-row.selected{border-color:#1D9E75;background:#F0FDF9;}
 .tag{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-left:6px;}
 .tag.labor{background:#DCFCE7;color:#166534;}
 .tag.mat{background:#FEF9C3;color:#854F0B;}
@@ -1109,7 +1123,10 @@ function continueIncomplete(i){
   document.getElementById("receiptSection").style.display="block";
   renderReceipts();
   showInvoicePreview(invoiceData);
-  addAIMsg(`Continuing materials invoice for ${inv.job_address}. Add more receipts or generate the PDF.`);
+  addAIMsg(t(
+    `Continuando la factura de materiales para ${inv.job_address}. Puedes editar cualquier parte de la factura, agregar recibos, o generar el PDF.`,
+    `Continuing materials invoice for ${inv.job_address}. You can edit any part of the invoice, add more receipts, or generate the PDF.`
+  ));
 }
 
 function resetChat(){
@@ -1922,7 +1939,7 @@ function showInvoicePreview(d,viewNum){
       ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('both')">✏️ ${t("Algo necesita corrección","Something needs correcting")}</button>`:""}
       <button class="pdf-btn" onclick="generatePDF('both',${viewNum||"null"})">⬇ ${t("Generar PDF","Generate PDF")}</button>
       <button class="text-btn" onclick="shareInvoicePDF('both',${viewNum||"null"})">📤 ${t("Compartir Factura","Share Invoice")}</button>
-      ${!viewNum?`<button class="save-btn" onclick="saveForLater()">💾 ${t("Guardar — agregar más recibos después","Save — add more receipts later")}</button>`:""}
+      ${!viewNum?`<button class="save-btn" onclick="saveForLater()">💾 ${t("Guardar — continuar después","Save — continue later")}</button>`:""}
     </div>`;
     html+=`<button class="new-invoice-btn" onclick="resetChat()">＋ ${t("Comenzar Nueva Factura","Start New Invoice")}</button>`;
     area.innerHTML=html;
@@ -1972,7 +1989,7 @@ function showInvoicePreview(d,viewNum){
       ${!viewNum?`<button class="correct-btn" onclick="showCorrectionMenu('materials')">✏️ ${t("Algo necesita corrección","Something needs correcting")}</button>`:""}
       <button class="pdf-btn mat" onclick="generatePDF('materials',${viewNum||"null"})">⬇ ${t("Generar PDF de Materiales","Generate Materials PDF")}</button>
       <button class="text-btn" onclick="shareInvoicePDF('materials',${viewNum||"null"})">📤 ${t("Compartir Factura","Share Invoice")}</button>
-      ${!viewNum?`<button class="save-btn" onclick="saveForLater()">💾 ${t("Guardar — agregar más recibos después","Save — add more receipts later")}</button>`:""}
+      ${!viewNum?`<button class="save-btn" onclick="saveForLater()">💾 ${t("Guardar — continuar después","Save — continue later")}</button>`:""}
     </div>`;
   }
 
@@ -1982,37 +1999,157 @@ function showInvoicePreview(d,viewNum){
 
 function showCorrectionMenu(type){
   if(!invoiceData) return;
-  const d=invoiceData;
-  const area=document.getElementById("chipArea");area.innerHTML="";
+  currentCorrectionType=type;
   const fields=[
-    {label:"Partner / Client",key:"ordered_by"},
-    {label:"Job Address",key:"job_address"},
-    {label:"Date",key:"date"},
+    {label:t("Socio / Cliente","Partner / Client"),key:"ordered_by"},
+    {label:t("Dirección del Trabajo","Job Address"),key:"job_address"},
+    {label:t("Fecha","Date"),key:"date"},
   ];
-  if(type==="labor"||type==="both") fields.push({label:"Work / Tasks",key:"work_items"});
-  if(type==="materials"||type==="both") fields.push({label:"Materials / Receipts",key:"materials_items"});
-  
-  addAIMsg("What needs to be corrected? Tap the item:");
-  fields.forEach(f=>{
-    const chip=document.createElement("div");chip.className="chip warn";chip.textContent=f.label;
-    chip.onclick=()=>{
-      area.innerHTML="";
-      const prompts={
-        "ordered_by":"Which partner or client ordered this work?",
-        "job_address":"Which street was the job on?",
-        "date":(type==="materials"||type==="both")?"What date should go on this invoice?":"What date was the work completed?",
-        "work_items":"Let's redo the tasks. What was the first task and its price?",
-        "materials_items":"Let's redo the materials. Where did you buy the first receipt?"
-      };
-      addAIMsg(prompts[f.key]||`Please provide the correct ${f.label}.`);
-      if(f.key==="job_address") showStreetChips();
-      else if(f.key==="ordered_by") showPartnerChips();
-      else if(f.key==="work_items"||f.key==="materials_items") showYesNoChips();
-      messages.push({role:"assistant",content:prompts[f.key]});
-    };
-    area.appendChild(chip);
-  });
-  document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
+  if(type==="labor"||type==="both") fields.push({label:t("Trabajo / Tareas","Work / Tasks"),key:"work_items"});
+  if(type==="materials"||type==="both") fields.push({label:t("Materiales / Recibos","Materials / Receipts"),key:"materials_items"});
+
+  const area=document.getElementById("invoiceArea");
+  const html=`<div class="invoice-preview">
+    <h3 style="font-size:15px;font-weight:600;margin-bottom:8px;">${t("¿Qué necesita corrección?","What needs to be corrected?")}</h3>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
+      ${fields.map(f=>`<button class="correct-btn" onclick="showFieldEditor('${f.key}')">✏️ ${f.label}</button>`).join("")}
+    </div>
+    <button class="edit-cancel-btn" onclick="showInvoicePreview(invoiceData)">${t("Cancelar","Cancel")}</button>
+  </div>`;
+  area.innerHTML=html;
+  if(area.scrollIntoView) area.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+let currentCorrectionType=null;
+
+function showFieldEditor(key){
+  const d=invoiceData;
+  const type=currentCorrectionType;
+  const area=document.getElementById("invoiceArea");
+  let bodyHtml="";
+
+  if(key==="date"){
+    bodyHtml=`<label class="inv-label">${t("Fecha","Date")}</label>
+      <input type="text" id="editFieldInput" class="edit-field-input" value="${(d.date||"").replace(/"/g,"&quot;")}">`;
+  } else if(key==="job_address"){
+    bodyHtml=`<label class="inv-label">${t("Dirección del Trabajo","Job Address")}</label>
+      <input type="text" id="editFieldInput" class="edit-field-input" value="${(d.job_address||"").replace(/"/g,"&quot;")}">`;
+  } else if(key==="ordered_by"){
+    const options=contractorInfo.mode==="bplw"?BPLW_PARTNERS.map(p=>p.name):savedClients.map(c=>c.name);
+    const currentIsKnown=options.includes(d.ordered_by);
+    bodyHtml=`<label class="inv-label">${t("Socio / Cliente","Partner / Client")}</label>
+      <div id="editPartnerList">
+        ${options.map(name=>`<div class="edit-partner-row${name===d.ordered_by?" selected":""}" data-name="${name.replace(/"/g,"&quot;")}" onclick="selectEditPartner(this)">${name}</div>`).join("")||`<div style="font-size:12px;color:#888;padding:6px 0;">${t("No hay opciones guardadas.","No saved options.")}</div>`}
+      </div>
+      <label class="inv-label" style="margin-top:10px;display:block;">${t("O escribe un nombre","Or type a name")}</label>
+      <input type="text" id="editPartnerCustom" class="edit-field-input" value="${currentIsKnown?"":(d.ordered_by||"").replace(/"/g,"&quot;")}" placeholder="${t("Nombre personalizado","Custom name")}">`;
+  } else if(key==="work_items"){
+    bodyHtml=`<label class="inv-label">${t("Trabajo Realizado","Work Performed")}</label>
+      <div id="editLineItems">
+        ${(d.work_items||[]).map((item,i)=>renderEditLineRow("work",i,item)).join("")}
+      </div>
+      <button class="edit-add-row-btn" onclick="addEditLineRow('work')">+ ${t("Agregar tarea","Add task")}</button>`;
+  } else if(key==="materials_items"){
+    bodyHtml=`<label class="inv-label">${t("Materiales Comprados","Materials Purchased")}</label>
+      <div id="editLineItems">
+        ${(d.materials_items||[]).map((item,i)=>renderEditLineRow("materials",i,item)).join("")}
+      </div>
+      <button class="edit-add-row-btn" onclick="addEditLineRow('materials')">+ ${t("Agregar recibo","Add receipt")}</button>`;
+  }
+
+  area.innerHTML=`<div class="invoice-preview">
+    <div class="edit-field-section">${bodyHtml}</div>
+    <button class="edit-save-btn" onclick="saveFieldEdit('${key}')">✓ ${t("Guardar Cambios","Save Changes")}</button>
+    <button class="edit-cancel-btn" onclick="showCorrectionMenu('${type}')">${t("Atrás","Back")}</button>
+  </div>`;
+  if(area.scrollIntoView) area.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function renderEditLineRow(kind,i,item){
+  if(kind==="work"){
+    return `<div class="edit-line-row" data-idx="${i}">
+      <input type="text" class="ln-desc" value="${(item.desc||"").replace(/"/g,"&quot;")}" placeholder="${t("Descripción","Description")}">
+      <input type="number" step="0.01" class="ln-amt" value="${item.amount}" placeholder="${t("Precio","Price")}">
+      <button class="edit-line-del" onclick="deleteEditLineRow(this)">×</button>
+    </div>`;
+  }
+  return `<div class="edit-line-row" data-idx="${i}">
+    <input type="text" class="ln-vendor" value="${(item.vendor||"").replace(/"/g,"&quot;")}" placeholder="${t("Tienda","Vendor")}">
+    <input type="text" class="ln-desc" value="${(item.desc||"").replace(/"/g,"&quot;")}" placeholder="${t("Artículo","Item")}">
+    <input type="text" class="ln-date" value="${(item.date||"").replace(/"/g,"&quot;")}" placeholder="${t("Fecha","Date")}">
+    <input type="number" step="0.01" class="ln-amt" value="${item.amount}" placeholder="${t("Precio","Price")}">
+    <button class="edit-line-del" onclick="deleteEditLineRow(this)">×</button>
+  </div>`;
+}
+
+function addEditLineRow(kind){
+  const container=document.getElementById("editLineItems");
+  const idx=container.children.length;
+  const blank=kind==="work"?{desc:"",amount:0}:{vendor:"",desc:"",date:"",amount:0};
+  container.insertAdjacentHTML("beforeend",renderEditLineRow(kind,idx,blank));
+}
+
+function deleteEditLineRow(btn){
+  btn.closest(".edit-line-row").remove();
+}
+
+function selectEditPartner(el){
+  document.querySelectorAll("#editPartnerList .edit-partner-row").forEach(r=>r.classList.remove("selected"));
+  el.classList.add("selected");
+  const customInput=document.getElementById("editPartnerCustom");
+  if(customInput) customInput.value="";
+}
+
+function saveFieldEdit(key){
+  const d=invoiceData;
+  if(key==="date"){
+    const newDate=document.getElementById("editFieldInput").value.trim();
+    if(newDate&&!dateHasYear(newDate)){
+      alert(t(
+        `La fecha "${newDate}" no incluye el año. Por favor incluye el año completo.`,
+        `The date "${newDate}" doesn't include a year. Please include the full year.`
+      ));
+      return;
+    }
+    d.date=newDate;
+  } else if(key==="job_address"){
+    d.job_address=document.getElementById("editFieldInput").value.trim();
+  } else if(key==="ordered_by"){
+    const customValue=document.getElementById("editPartnerCustom").value.trim();
+    const selected=document.querySelector("#editPartnerList .edit-partner-row.selected");
+    if(customValue) d.ordered_by=customValue;
+    else if(selected) d.ordered_by=selected.dataset.name;
+  } else if(key==="work_items"){
+    const rows=document.querySelectorAll("#editLineItems .edit-line-row");
+    const items=[];
+    rows.forEach(row=>{
+      const desc=row.querySelector(".ln-desc").value.trim();
+      const amount=parseFloat(row.querySelector(".ln-amt").value)||0;
+      if(desc) items.push({desc,amount});
+    });
+    if(items.length===0){alert(t("Debe haber al menos una tarea.","There must be at least one task."));return;}
+    d.work_items=items;
+  } else if(key==="materials_items"){
+    const rows=document.querySelectorAll("#editLineItems .edit-line-row");
+    const items=[];
+    rows.forEach(row=>{
+      const vendor=row.querySelector(".ln-vendor").value.trim();
+      const desc=row.querySelector(".ln-desc").value.trim();
+      const date=row.querySelector(".ln-date").value.trim();
+      const amount=parseFloat(row.querySelector(".ln-amt").value)||0;
+      if(desc||vendor) items.push({vendor,desc,date,amount});
+    });
+    const badDate=items.find(item=>item.date&&!dateHasYear(item.date));
+    if(badDate){
+      alert(t(
+        `La fecha "${badDate.date}" no incluye el año. Por favor incluye el año completo.`,
+        `The date "${badDate.date}" doesn't include a year. Please include the full year.`
+      ));
+      return;
+    }
+    d.materials_items=items;
+  }
+  showInvoicePreview(d);
 }
 
 function saveForLater(){
@@ -2036,7 +2173,10 @@ function saveForLater(){
     document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
     return;
   }
-  addAIMsg("💾 Saved! Tap 'Uncompleted invoices' at the top to come back and add more receipts.");
+  addAIMsg(t(
+    "💾 ¡Guardado! Toca \"Pendientes\" arriba para continuar — puedes seguir editando cualquier parte de esta factura, no solo los recibos.",
+    "💾 Saved! Tap \"Uncompleted\" at the top to continue — you can still edit any part of this invoice, not just add receipts."
+  ));
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
 }
 
