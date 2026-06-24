@@ -653,13 +653,13 @@ function parseAddressIntoParts(full){
     // separating them (e.g. "1952 Caspian Avenue Long Beach California 90810").
     const wholeMatch=streetPart.match(/^(\d+\s+.+?)\s+([A-Za-z]+(?:\s[A-Za-z]+)?)\s+([A-Za-z]{2}|[A-Za-z]{3,})\s+(\d{5}(?:-\d{4})?)$/);
     if(wholeMatch){
-      const unitMatch1=wholeMatch[1].match(/\bUnit\s+(.+)$/i);
+      const unitMatch1=wholeMatch[1].match(/\b(?:unit|apt\.?|apartment|suite|ste\.?)\b\s*#?\s*(.+)$/i);
       const unit=unitMatch1?unitMatch1[1].trim():"";
       const street=unitMatch1?wholeMatch[1].slice(0,unitMatch1.index).trim():wholeMatch[1].trim();
       return {street,unit,city:wholeMatch[2].trim(),state:wholeMatch[3].trim(),zip:wholeMatch[4].trim()};
     }
   }
-  const unitMatch=streetPart.match(/\bUnit\s+(.+)$/i);
+  const unitMatch=streetPart.match(/\b(?:unit|apt\.?|apartment|suite|ste\.?)\b\s*#?\s*(.+)$/i);
   const unit=unitMatch?unitMatch[1].trim():"";
   const street=unitMatch?streetPart.slice(0,unitMatch.index).trim():streetPart;
   // Try a 2-letter state code first (e.g. "Long Beach CA 90802")...
@@ -678,7 +678,12 @@ function parseAddressIntoParts(full){
   return {street,unit,city:cityStateZipPart,state:"",zip:""};
 }
 function buildAddressFromParts(street,unit,city,state,zip){
-  const unitPart=unit.trim()?` Unit ${unit.trim()}`:"";
+  const trimmedUnit=unit.trim();
+  // formatUnit() already produces a labeled value like "Apt #1" — only prepend "Unit" for
+  // a bare, unlabeled value (e.g. if it's empty, already labeled, or came from elsewhere
+  // without normalization).
+  const alreadyLabeled=/^(apt|apartment|unit|suite|ste)\b/i.test(trimmedUnit);
+  const unitPart=trimmedUnit?(alreadyLabeled?` ${trimmedUnit}`:` Unit ${trimmedUnit}`):"";
   const cityStateZip=[city,state,zip].filter(Boolean).join(state||zip?" ":", ");
   return [`${street.trim()}${unitPart}`,cityStateZip].filter(Boolean).join(", ");
 }
@@ -978,7 +983,7 @@ function saveSettingsForm(){
   const lastName=document.getElementById("setLastName").value.trim();
   const businessName=document.getElementById("setBusinessName").value.trim();
   const street=document.getElementById("setStreet").value.trim();
-  const unit=document.getElementById("setUnit").value.trim();
+  const unit=formatUnit(document.getElementById("setUnit").value.trim());
   const city=document.getElementById("setCity").value.trim();
   const state=document.getElementById("setState").value.trim();
   const zip=document.getElementById("setZip").value.trim();
@@ -1807,6 +1812,42 @@ async function deletePhotoBlob(id){
 }
 async function getPhotoBlobs(ids){
   return Promise.all((ids||[]).map(id=>getPhotoBlob(id)));
+}
+
+// Normalizes spoken-out unit/apartment descriptions into a compact "Apt #N" format.
+// Voice dictation transcribes exactly what's said — "apartment number one" comes through
+// as that literal phrase, not "Apt 1" — so this catches the common ways people say a unit
+// number and condenses them, the same way formatPhone() normalizes spoken/typed phone numbers.
+const UNIT_WORD_NUMBERS={
+  "zero":"0","one":"1","two":"2","three":"3","four":"4","five":"5","six":"6","seven":"7",
+  "eight":"8","nine":"9","ten":"10","eleven":"11","twelve":"12","thirteen":"13","fourteen":"14",
+  "fifteen":"15","sixteen":"16","seventeen":"17","eighteen":"18","nineteen":"19","twenty":"20",
+  "thirty":"30","forty":"40","fifty":"50"
+};
+function formatUnit(raw){
+  if(!raw) return raw;
+  let s=raw.trim();
+  if(!s) return s;
+  const lower=s.toLowerCase();
+  // Strip a leading "apartment/apt/unit/suite/ste number" phrase, keeping whatever identifier follows
+  const stripped=lower.replace(/^(apartment|apt\.?|unit|suite|ste\.?)\s+(number|no\.?|#)?\s*/i,"").trim();
+  let identifier=stripped||lower;
+  // Convert a spelled-out number word (or two words, e.g. "twenty one") to digits
+  const words=identifier.split(/\s+/);
+  if(words.length<=2 && words.every(w=>UNIT_WORD_NUMBERS[w]!==undefined)){
+    if(words.length===2){
+      identifier=String(parseInt(UNIT_WORD_NUMBERS[words[0]],10)+parseInt(UNIT_WORD_NUMBERS[words[1]],10));
+    } else {
+      identifier=UNIT_WORD_NUMBERS[words[0]];
+    }
+  }
+  // If what's left is just a bare number or number+letter (e.g. "1", "5b", "12a"), format it cleanly
+  if(/^\d+[a-zA-Z]?$/.test(identifier)){
+    return `Apt #${identifier.toUpperCase()}`;
+  }
+  // Couldn't confidently normalize (e.g. "the one in the back") — return the original text
+  // unchanged rather than risk mangling something we don't understand.
+  return raw.trim();
 }
 
 function formatPhone(raw){
