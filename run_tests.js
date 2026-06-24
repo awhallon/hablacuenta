@@ -1910,6 +1910,82 @@ async function testDualLanguageToggle() {
     fnSource.includes("invoiceLang===lang"));
 }
 
+async function testFormatUnitNormalization() {
+  console.log("\n=== TEST SUITE 32: Unit Number Normalization (regression for Adrian's reported voice-dictation bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // The exact phrase from Adrian's real screenshot — voice dictation transcribed exactly
+  // what was said, and the app must normalize it rather than storing it verbatim.
+  check("'Apartment number one' (Adrian's exact reported phrase) normalizes to 'Apt #1'",
+    win.eval(`formatUnit("Apartment number one")`) === "Apt #1");
+
+  // Other spoken-style phrasings
+  check("'apartment number five' normalizes correctly", win.eval(`formatUnit("apartment number five")`) === "Apt #5");
+  check("'unit number twelve' normalizes correctly", win.eval(`formatUnit("unit number twelve")`) === "Apt #12");
+  check("'suite number twenty one' (two-word number) normalizes correctly", win.eval(`formatUnit("suite number twenty one")`) === "Apt #21");
+  check("'apartment 7' (no 'number' word) normalizes correctly", win.eval(`formatUnit("apartment 7")`) === "Apt #7");
+
+  // Already-typed/compact formats should still normalize consistently
+  check("Bare number '5B' normalizes to 'Apt #5B'", win.eval(`formatUnit("5B")`) === "Apt #5B");
+  check("Bare number '12' normalizes to 'Apt #12'", win.eval(`formatUnit("12")`) === "Apt #12");
+  check("'Unit 5' normalizes to 'Apt #5'", win.eval(`formatUnit("Unit 5")`) === "Apt #5");
+  check("'Apt 3' normalizes to 'Apt #3'", win.eval(`formatUnit("Apt 3")`) === "Apt #3");
+
+  // Edge cases that must NOT be mangled
+  check("Empty string passes through unchanged", win.eval(`formatUnit("")`) === "");
+  check("Unrecognizable free text passes through unchanged rather than being mangled",
+    win.eval(`formatUnit("the one in the back")`) === "the one in the back");
+
+  // Integration: saving Settings with a spoken-style unit should store the normalized form
+  win.eval(`showSettings()`);
+  win.document.getElementById("setFirstName").value = "Test";
+  win.document.getElementById("setStreet").value = "310 Main Avenue";
+  win.document.getElementById("setUnit").value = "Apartment number one";
+  win.document.getElementById("setCity").value = "Long Beach";
+  win.document.getElementById("setState").value = "CA";
+  win.document.getElementById("setZip").value = "90802";
+  win.eval(`saveSettingsForm()`);
+  const savedAddress = win.eval('contractorInfo.address');
+  check("Saved address contains the normalized 'Apt #1', not the raw spoken phrase",
+    savedAddress.includes("Apt #1") && !savedAddress.toLowerCase().includes("apartment number"));
+  check("Saved address does NOT double-label the unit (no 'Unit Apt #1')",
+    !savedAddress.includes("Unit Apt"));
+
+  // Round-trip: re-opening Settings should split the normalized address back out correctly.
+  // The Unit field shows the bare identifier ("1"), not the full "Apt #1" label, since the
+  // field's own "Unit / Suite" label already provides that context — formatUnit() re-adds
+  // the "Apt #" label on the next save, not on display.
+  win.eval(`showSettings()`);
+  check("Re-opening Settings shows the bare unit identifier after parsing",
+    win.document.getElementById("setUnit").value === "1");
+  check("Street field is correctly separated from the normalized unit on reload",
+    win.document.getElementById("setStreet").value === "310 Main Avenue");
+
+  // Regression guard: a real street name containing a similar word (e.g. "Unity Avenue")
+  // must NOT be misparsed as having a unit number.
+  const unityCase = JSON.parse(win.eval(`JSON.stringify(parseAddressIntoParts("500 Unity Avenue, Riverside CA 92501"))`));
+  check("A street legitimately named 'Unity Avenue' is NOT misparsed as containing a unit number",
+    unityCase.unit === "" && unityCase.street.includes("Unity Avenue"),
+    `got: ${JSON.stringify(unityCase)}`);
+
+  // Confirm the parser also recognizes the new Apt # format when splitting an existing saved address
+  const aptCase = JSON.parse(win.eval(`JSON.stringify(parseAddressIntoParts("310 Main Avenue Apt #1, Long Beach CA 90802"))`));
+  check("parseAddressIntoParts correctly extracts a unit stored in the new 'Apt #N' format",
+    aptCase.unit === "1" && aptCase.street === "310 Main Avenue");
+
+  // Stability check: repeated save -> reload -> save cycles must not degrade or change the
+  // address over time (no creeping double-labels, no data loss across cycles).
+  win.eval(`showSettings(); saveSettingsForm();`); // re-save without touching the field
+  const afterSecondSave = win.eval('contractorInfo.address');
+  win.eval(`showSettings(); saveSettingsForm();`); // and a third time
+  const afterThirdSave = win.eval('contractorInfo.address');
+  check("Repeated save/reload cycles produce a stable, unchanging address",
+    afterSecondSave === savedAddress && afterThirdSave === savedAddress,
+    `save1: "${savedAddress}", save2: "${afterSecondSave}", save3: "${afterThirdSave}"`);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -1944,6 +2020,7 @@ async function testDualLanguageToggle() {
     await testAddressParsingAndBuilding();
     await testFirstTimeWelcomeAndOnboarding();
     await testDualLanguageToggle();
+    await testFormatUnitNormalization();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
