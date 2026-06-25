@@ -110,6 +110,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .back-btn{width:100%;margin-top:10px;padding:10px;border-radius:12px;border:1px solid #E5E7EB;background:#fff;color:#111;cursor:pointer;font-size:14px;}
 .incomplete-item{background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;}
 .incomplete-item:active{transform:scale(0.98);}
+.incomplete-item-row{background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.incomplete-item-info{cursor:pointer;flex:1;min-width:0;}
+.incomplete-item-info:active{opacity:0.7;}
+.incomplete-del-btn{padding:5px 12px;border-radius:8px;border:1px solid #E5E7EB;background:#fff;color:#888;cursor:pointer;font-size:12px;flex-shrink:0;}
 .incomplete-title{font-size:13px;font-weight:600;color:#111;}
 .incomplete-sub{font-size:11px;color:#888;margin-top:2px;}
 input[type=file]{display:none;}
@@ -1062,16 +1066,32 @@ function renderIncompleteList(){
   el.innerHTML=incompleteInvoices.map((inv,i)=>{
     if(inv.kind==="conversation"){
       const typeLabel=inv.invoiceType==="labor"?t("Trabajo","Labor"):inv.invoiceType==="materials"?t("Materiales","Materials"):t("Trabajo y Materiales","Labor & Materials");
-      return `<div class="incomplete-item" onclick="continueIncomplete(${i})">
-        <div class="incomplete-title">${typeLabel} — ${t("En Progreso","In Progress")}${inv.job_address?" — "+inv.job_address:""}</div>
-        <div class="incomplete-sub">${(inv.messages||[]).length} ${t("mensajes hasta ahora","messages so far")} · ${t("Toca para continuar","Tap to continue")}</div>
+      return `<div class="incomplete-item-row">
+        <div class="incomplete-item-info" onclick="continueIncomplete(${i})">
+          <div class="incomplete-title">${typeLabel} — ${t("En Progreso","In Progress")}${inv.job_address?" — "+inv.job_address:""}</div>
+          <div class="incomplete-sub">${(inv.messages||[]).length} ${t("mensajes hasta ahora","messages so far")} · ${t("Toca para continuar","Tap to continue")}</div>
+        </div>
+        <button class="incomplete-del-btn" onclick="deleteIncomplete(${i})">${t("Eliminar","Delete")}</button>
       </div>`;
     }
-    return `<div class="incomplete-item" onclick="continueIncomplete(${i})">
-      <div class="incomplete-title">${t("Materiales","Materials")} — ${inv.job_address||t("Trabajo Pendiente","Job TBD")}</div>
-      <div class="incomplete-sub">${inv.receipts_count||0} ${t("recibo(s)","receipt(s)")} · ${inv.date||t("Fecha Pendiente","Date TBD")} · ${t("Toca para continuar","Tap to continue")}</div>
+    return `<div class="incomplete-item-row">
+      <div class="incomplete-item-info" onclick="continueIncomplete(${i})">
+        <div class="incomplete-title">${t("Materiales","Materials")} — ${inv.job_address||t("Trabajo Pendiente","Job TBD")}</div>
+        <div class="incomplete-sub">${inv.receipts_count||0} ${t("recibo(s)","receipt(s)")} · ${inv.date||t("Fecha Pendiente","Date TBD")} · ${t("Toca para continuar","Tap to continue")}</div>
+      </div>
+      <button class="incomplete-del-btn" onclick="deleteIncomplete(${i})">${t("Eliminar","Delete")}</button>
     </div>`;
   }).join("");
+}
+function deleteIncomplete(i){
+  const inv=incompleteInvoices[i];
+  // Clean up any photos this entry referenced in IndexedDB, so deleting from the list doesn't
+  // leave orphaned photo blobs taking up storage indefinitely.
+  (inv.receipts||[]).forEach(id=>deletePhotoBlob(id));
+  (inv.jobPhotos||[]).forEach(id=>deletePhotoBlob(id));
+  incompleteInvoices.splice(i,1);
+  saveIncomplete();
+  renderIncompleteList();
 }
 function continueIncomplete(i){
   const inv=incompleteInvoices[i];
