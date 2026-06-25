@@ -2291,7 +2291,21 @@ async function buildPDF(type,forceNum){
   doc.setFontSize(14);doc.setFont("helvetica","bold");
   doc.setTextColor(...titleColor);
   doc.text(isCombined?"INVOICE — LABOR & MATERIALS":isLabor?"LABOR INVOICE":"MATERIALS INVOICE",M+16,y+26);
-  const invNum=forceNum||(isCombined?laborNum:isLabor?laborNum:matNum);
+  // Only assign a fresh invoice number the first time this invoice is generated/shared.
+  // Re-generating or re-sharing the SAME invoice must reuse the same number — without this,
+  // tapping "Share Invoice" repeatedly on one invoice silently consumed a new number each
+  // time and created duplicate-looking entries in History.
+  let invNum;
+  let isFreshAssignment=false;
+  if(forceNum){
+    invNum=forceNum;
+  } else if(invoiceData.assignedInvNum){
+    invNum=invoiceData.assignedInvNum;
+  } else {
+    invNum=isCombined?laborNum:isLabor?laborNum:matNum;
+    invoiceData.assignedInvNum=invNum;
+    isFreshAssignment=true;
+  }
   doc.setFontSize(10);doc.setFont("helvetica","normal");
   doc.text(`Invoice #${invNum}   ·   ${d.date}`,W-M-16,y+26,{align:"right"});
   y+=56;
@@ -2365,16 +2379,16 @@ async function buildPDF(type,forceNum){
     }
   }
   const fname=isCombined?`Invoice_${invNum}.pdf`:isLabor?`Labor_Invoice_${invNum}.pdf`:`Materials_Invoice_${invNum}.pdf`;
-  return {doc,fname,isLabor,isCombined,invNum};
+  return {doc,fname,isLabor,isCombined,invNum,isFreshAssignment};
 }
 
 async function generatePDF(type,forceNum){
   const built=await buildPDF(type,forceNum);
   if(!built)return;
-  const {doc,fname,isLabor,isCombined,invNum}=built;
+  const {doc,fname,isLabor,isCombined,invNum,isFreshAssignment}=built;
   doc.save(fname);
   recordInvoiceHistory(type,invNum);
-  if(!forceNum){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
+  if(isFreshAssignment){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
   addAIMsg(`📄 PDF downloaded: ${fname}. Tap "Share Invoice" to send it directly, or attach it manually from your Downloads.`);
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
 }
@@ -2382,7 +2396,7 @@ async function generatePDF(type,forceNum){
 async function shareInvoicePDF(type,forceNum){
   const built=await buildPDF(type,forceNum);
   if(!built)return;
-  const {doc,fname,isLabor,isCombined,invNum}=built;
+  const {doc,fname,isLabor,isCombined,invNum,isFreshAssignment}=built;
   const blob=doc.output("blob");
   const file=new File([blob],fname,{type:"application/pdf"});
   const shareText=`${isCombined?"Invoice (labor & materials)":isLabor?"Labor invoice":"Materials invoice"} from ${contractorDisplayName(contractorInfo)}.`;
@@ -2390,7 +2404,7 @@ async function shareInvoicePDF(type,forceNum){
     try{
       await navigator.share({files:[file],title:fname,text:shareText});
       recordInvoiceHistory(type,invNum);
-      if(!forceNum){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
+      if(isFreshAssignment){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
       addAIMsg("📤 Invoice shared!");
     }catch(e){
       if(e.name!=="AbortError") addAIMsg("Share canceled or unavailable. Tap 'Generate PDF' to download instead.");
@@ -2399,7 +2413,7 @@ async function shareInvoicePDF(type,forceNum){
     // Fallback: browser doesn't support sharing files (e.g. desktop) — fall back to download
     doc.save(fname);
     recordInvoiceHistory(type,invNum);
-    if(!forceNum){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
+    if(isFreshAssignment){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
     addAIMsg(`📄 Your browser doesn't support direct sharing — PDF downloaded instead: ${fname}.`);
   }
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
