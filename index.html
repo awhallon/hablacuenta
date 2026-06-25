@@ -1023,11 +1023,15 @@ function renderHistoryList(){
   if(!invoiceHistory.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">${t("Aún no hay facturas.","No invoices yet.")}</div>`;return;}
   el.innerHTML=invoiceHistory.map((h,i)=>{
     const d=h.invoiceData;
-    const label=h.type==="labor"?t("Trabajo","Labor"):h.type==="both"?t("Trabajo y Materiales","Labor & Materials"):t("Materiales","Materials");
     const dateStr=d.date||"";
+    const customer=d.ordered_by||d.bill_to_name||"";
+    const street=parseAddressIntoParts(d.job_address||"").street||d.job_address||"";
+    const laborTotal=(d.work_items||[]).reduce((s,item)=>s+parseFloat(item.amount||0),0);
+    const matTotal=(d.materials_items||[]).reduce((s,item)=>s+parseFloat(item.amount||0),0);
+    const total=fmt(laborTotal+matTotal);
     return `<div class="incomplete-item" onclick="viewHistoryInvoice(${i})">
-      <div class="incomplete-title">#${h.invNum} — ${label} — ${d.job_address||t("Trabajo","Job")}</div>
-      <div class="incomplete-sub">${d.ordered_by||""} · ${dateStr} · ${t("Toca para ver","Tap to view")}</div>
+      <div class="incomplete-title">#${h.invNum} · ${dateStr} · ${customer}${street?" · "+street:""} · ${total}</div>
+      <div class="incomplete-sub">${t("Toca para ver","Tap to view")}</div>
     </div>`;
   }).join("");
 }
