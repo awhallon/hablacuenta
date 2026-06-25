@@ -31,6 +31,7 @@ function freshDom() {
     };
   });
   MockJsPDF.prototype.output = function(type) { return new Blob(["fake-pdf-content"], {type:"application/pdf"}); };
+  MockJsPDF.prototype.save = function(fname) { /* no-op in test environment — no real file download to perform */ };
 
   const dom = new JSDOM(pageHtml, {
     runScripts: "dangerously",
@@ -59,6 +60,15 @@ function wait(ms) { return new Promise(res => setTimeout(res, ms)); }
 // or the page will have already read an empty localStorage and baked in the defaults.
 function domWithPreseededStorage(storageEntries) {
   function MockJsPDF(opts) { this.opts = opts; }
+  const chainMethods = ["setFontSize","setFont","setTextColor","text","setDrawColor","setLineWidth","line","setFillColor","roundedRect","splitTextToSize","addPage","addImage"];
+  chainMethods.forEach(m => {
+    MockJsPDF.prototype[m] = function(...args) {
+      if (m === "splitTextToSize") return [String(args[0])];
+      return this;
+    };
+  });
+  MockJsPDF.prototype.output = function(type) { return new Blob(["fake-pdf-content"], {type:"application/pdf"}); };
+  MockJsPDF.prototype.save = function(fname) { /* no-op in test environment */ };
   const dom = new JSDOM(html.replace(/<script src="https:\/\/cdnjs[^>]*><\/script>/, ''), {
     runScripts: "dangerously",
     resources: "usable",
@@ -2240,6 +2250,102 @@ async function testPhotoInputAllowsGallerySelection() {
   check("Receipt photo input still restricts to image files", receiptInput.getAttribute("accept") === "image/*");
 }
 
+async function testInvoiceNumberStaysStableAcrossRepeatedShares() {
+  console.log("\n=== TEST SUITE 37: Invoice Number Stays Stable Across Repeated Shares (regression for Adrian's reported duplicate-history bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`
+    contractorInfo.mode = "bplw";
+    invoiceType = "both";
+    invoiceData = {
+      done:true, bill_to_name:"BPLW Management", bill_to_address:"PO Box 9395, Long Beach CA 90810", bill_to_email:"x", bill_to_phone:"",
+      ordered_by:"Andrew Whallon", job_address:"1995 Canal Ave, Long Beach CA 90810",
+      work_items:[{desc:"Replace water heater",amount:700}],
+      materials_items:[{vendor:"Home Depot",desc:"Plumbing materials",date:"May 23, 2026",amount:115.51}],
+      date:"May 23, 2026", has_materials:true, has_labor:true
+    };
+  `);
+  const startingLaborNum = win.eval('laborNum');
+
+  // Simulate sharing the SAME invoice six times, matching Adrian's exact real scenario
+  const invNumsSeen = [];
+  for (let i = 0; i < 6; i++) {
+    const built = await win.eval(`buildPDF("both")`);
+    invNumsSeen.push(built.invNum);
+    win.eval(`recordInvoiceHistory("both", ${built.invNum})`);
+    if (built.isFreshAssignment) {
+      win.eval(`laborNum++; saveLaborNum();`);
+    }
+  }
+
+  check("The invoice number is IDENTICAL across all six shares of the same invoice (not incrementing)",
+    invNumsSeen.every(n => n === invNumsSeen[0]),
+    `numbers seen: ${JSON.stringify(invNumsSeen)}`);
+  check("Only the FIRST share actually consumed a number from the counter — counter advanced by exactly 1, not 6",
+    win.eval('laborNum') === startingLaborNum + 1,
+    `started at ${startingLaborNum}, ended at ${win.eval('laborNum')}`);
+
+  // Critically: History must show exactly ONE entry for this invoice, not six duplicates
+  const historyEntries = JSON.parse(win.eval('JSON.stringify(invoiceHistory)'));
+  const matchingEntries = historyEntries.filter(h => h.invNum === invNumsSeen[0]);
+  check("Exactly ONE history entry exists for this invoice after six shares, not six duplicate entries",
+    matchingEntries.length === 1, `found ${matchingEntries.length} entries for invNum ${invNumsSeen[0]}`);
+  check("Invoice History contains exactly one entry total (no other phantom entries were created)",
+    historyEntries.length === 1, `found ${historyEntries.length} total history entries`);
+
+  // The invoice number must be remembered directly on invoiceData itself, so it survives
+  // even if buildPDF is called again much later in the same session
+  check("invoiceData.assignedInvNum is set after the first build, so the number is genuinely persistent",
+    win.eval('invoiceData.assignedInvNum') === invNumsSeen[0]);
+
+  // Starting a genuinely NEW invoice (via resetChat) must NOT reuse the old assignedInvNum,
+  // and must correctly get the next available number
+  win.eval(`resetChat()`);
+  win.eval(`
+    invoiceType = "labor";
+    invoiceData = {
+      done:true, bill_to_name:"BPLW Management", bill_to_address:"x", bill_to_email:"x", bill_to_phone:"",
+      ordered_by:"Richard Baisz", job_address:"456 Different St",
+      work_items:[{desc:"A different job",amount:200}], materials_items:[],
+      date:"June 1, 2026", has_materials:false, has_labor:true
+    };
+  `);
+  check("A genuinely new invoice has no assignedInvNum yet", win.eval('invoiceData.assignedInvNum') === undefined);
+  const newBuilt = await win.eval(`buildPDF("labor")`);
+  check("A new invoice gets the NEXT sequential number, not a repeat of the previous invoice's number",
+    newBuilt.invNum === startingLaborNum + 1);
+  check("buildPDF correctly reports this as a fresh assignment for the new invoice",
+    newBuilt.isFreshAssignment === true);
+
+  // generatePDF and shareInvoicePDF themselves must also only increment once, end-to-end
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval(`
+    contractorInfo.mode = "generic";
+    invoiceType = "materials";
+    invoiceData = {
+      done:true, bill_to_name:"Test Client", bill_to_address:"x", bill_to_email:"x", bill_to_phone:"",
+      ordered_by:"", job_address:"123 Main St",
+      work_items:[], materials_items:[{vendor:"A",desc:"B",date:"x",amount:10}],
+      date:"June 1, 2026", has_materials:true, has_labor:false
+    };
+    document.getElementById("photoSections").style.display = "block";
+    document.getElementById("receiptSection").style.display = "block";
+  `);
+  const startingMatNum = win2.eval('matNum');
+  await win2.eval(`generatePDF("materials")`);
+  await win2.eval(`generatePDF("materials")`);
+  await win2.eval(`generatePDF("materials")`);
+  check("Calling generatePDF three times on the same invoice only increments matNum once",
+    win2.eval('matNum') === startingMatNum + 1, `started ${startingMatNum}, ended ${win2.eval('matNum')}`);
+  const historyAfterThreeGenerates = JSON.parse(win2.eval('JSON.stringify(invoiceHistory)'));
+  check("generatePDF called three times on the same invoice produces exactly one history entry",
+    historyAfterThreeGenerates.length === 1);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2279,6 +2385,7 @@ async function testPhotoInputAllowsGallerySelection() {
     await testInlineCorrectionEditorSimpleFields();
     await testInlineCorrectionEditorLineItems();
     await testPhotoInputAllowsGallerySelection();
+    await testInvoiceNumberStaysStableAcrossRepeatedShares();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
