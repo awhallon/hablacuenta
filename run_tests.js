@@ -2368,6 +2368,79 @@ async function testInvoiceNumberStaysStableAcrossRepeatedShares() {
     historyAfterThreeGenerates.length === 1);
 }
 
+async function testDeleteFromUncompletedList() {
+  console.log("\n=== TEST SUITE 38: Delete From Uncompleted List (regression for Adrian's reported missing-delete bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // Set up two different kinds of incomplete entries: a mid-conversation save and a
+  // finished-invoice-pending-receipts save, matching the two real entry types this list holds.
+  win.eval(`
+    incompleteInvoices = [
+      {kind:"conversation", invoiceType:"labor", messages:[{role:"user",content:"x"}], convStage:"tasks", currentOrderedBy:"Andrew Whallon", contractorMode:"bplw", job_address:"123 Main St", jobPhotos:[], receipts:[], saved_at:new Date().toISOString()},
+      {invoiceData:{job_address:"456 Other St", date:"June 1, 2026"}, receipts:[], job_address:"456 Other St", date:"June 1, 2026", receipts_count:1, saved_at:new Date().toISOString()}
+    ];
+    saveIncomplete();
+    renderIncompleteList();
+  `);
+
+  const initialHtml = win.document.getElementById("incompleteList").innerHTML;
+  check("Both incomplete entries render with a visible Delete button",
+    (initialHtml.match(/incomplete-del-btn/g)||[]).length === 2);
+  check("Each entry's clickable info area is a separate element from its delete button (so tapping Delete doesn't also resume the invoice)",
+    initialHtml.includes("incomplete-item-info") && initialHtml.includes("incomplete-del-btn"));
+
+  // Delete the first (conversation-type) entry
+  win.eval(`deleteIncomplete(0)`);
+  check("Deleting the first entry removes it from incompleteInvoices", win.eval('incompleteInvoices.length') === 1);
+  check("The remaining entry is the second one (finished-invoice type), not the deleted conversation entry",
+    win.eval('incompleteInvoices[0].job_address') === "456 Other St");
+
+  // Confirm the deletion actually persisted to localStorage, not just the in-memory array
+  const persistedAfterDelete = JSON.parse(win.eval('localStorage.getItem("alfonso_incomplete")'));
+  check("Deletion is persisted to localStorage, surviving a reload", persistedAfterDelete.length === 1);
+
+  // Delete the remaining entry too
+  win.eval(`deleteIncomplete(0)`);
+  check("Deleting the last entry leaves the list empty", win.eval('incompleteInvoices.length') === 0);
+  win.eval(`renderIncompleteList()`);
+  const emptyHtml = win.document.getElementById("incompleteList").innerHTML;
+  check("After deleting all entries, the empty-state message displays correctly",
+    emptyHtml.includes("No uncompleted invoices") || emptyHtml.includes("No hay facturas pendientes"));
+
+  // Deleting an entry must NOT affect Invoice History — these are separate, independent lists
+  win.eval(`
+    invoiceHistory = [{type:"labor", invNum:99001, invoiceData:{job_address:"789 History Rd", date:"x", ordered_by:"x", work_items:[{desc:"a",amount:1}], materials_items:[]}, receipts:[], jobPhotos:[], created_at:new Date().toISOString()}];
+    incompleteInvoices = [{invoiceData:{job_address:"999 Pending St", date:"x"}, receipts:[], job_address:"999 Pending St", date:"x", receipts_count:0, saved_at:new Date().toISOString()}];
+    saveHistory();
+    saveIncomplete();
+    deleteIncomplete(0);
+  `);
+  check("Deleting an Uncompleted entry does not touch Invoice History at all", win.eval('invoiceHistory.length') === 1);
+  check("The History entry's data is completely untouched", win.eval('invoiceHistory[0].invoiceData.job_address') === "789 History Rd");
+
+  // Photo cleanup: deleting an entry with referenced photos should clean up the underlying
+  // IndexedDB blobs, not just remove the reference and leak storage
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  const photoId1 = await win2.eval(`savePhotoBlob("data:image/jpeg;base64,RECEIPT1")`);
+  const photoId2 = await win2.eval(`savePhotoBlob("data:image/jpeg;base64,JOBPHOTO1")`);
+  win2.eval(`
+    incompleteInvoices = [{invoiceData:{job_address:"x", date:"x"}, receipts:["${photoId1}"], jobPhotos:["${photoId2}"], job_address:"x", date:"x", receipts_count:1, saved_at:new Date().toISOString()}];
+    saveIncomplete();
+  `);
+  await win2.eval(`deleteIncomplete(0)`);
+  await wait(200);
+  const photo1AfterDelete = await win2.eval(`getPhotoBlob("${photoId1}")`);
+  const photo2AfterDelete = await win2.eval(`getPhotoBlob("${photoId2}")`);
+  check("Deleting an incomplete entry also cleans up its referenced receipt photo from IndexedDB (no orphaned storage)",
+    photo1AfterDelete === null);
+  check("Deleting an incomplete entry also cleans up its referenced job photo from IndexedDB",
+    photo2AfterDelete === null);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2408,6 +2481,7 @@ async function testInvoiceNumberStaysStableAcrossRepeatedShares() {
     await testInlineCorrectionEditorLineItems();
     await testPhotoInputAllowsGallerySelection();
     await testInvoiceNumberStaysStableAcrossRepeatedShares();
+    await testDeleteFromUncompletedList();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
