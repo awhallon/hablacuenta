@@ -2535,6 +2535,50 @@ async function testGeneratePdfOpensForViewingNotDownload() {
     chatHtml.includes("Share Invoice") || chatHtml.includes("Compartir Factura"));
 }
 
+async function testStaleFreeConversationCorrectionFlowRemoved() {
+  console.log("\n=== TEST SUITE 41: Stale Free-Conversation Correction Flow Removed (regression for Adrian's reported dead-end bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const sysPrompt = win.eval('getSystemPrompt()');
+  check("System prompt no longer instructs the AI to list collected fields as a numbered menu",
+    !sysPrompt.includes("list the collected fields as a numbered menu"));
+  check("System prompt no longer instructs asking 'which task number do you want to change'",
+    !sysPrompt.toLowerCase().includes("which task number do you want to change"));
+  check("System prompt now explicitly tells the AI to emit the JSON immediately rather than asking what to fix",
+    sysPrompt.includes("respond with the final JSON immediately"));
+  check("System prompt explicitly tells the AI not to have a back-and-forth about corrections in chat",
+    sysPrompt.toLowerCase().includes("never in this conversation") || sysPrompt.toLowerCase().includes("do not list fields as a numbered menu"));
+
+  // The confirmation chip's underlying message should no longer be the literal phrase that
+  // used to trigger the broken numbered-list flow
+  win.eval(`showConfirmChips()`);
+  const chipArea = win.document.getElementById("chipArea");
+  const fixChip = Array.from(chipArea.querySelectorAll(".chip")).find(c => c.className.includes("warn"));
+  check("The 'fix something' chip exists and has updated text reflecting the new flow",
+    !!fixChip && (fixChip.textContent.includes("Continue") || fixChip.textContent.includes("Continuar")));
+
+  // Clicking it should send a message that does NOT match the old broken trigger phrase
+  fixChip.click();
+  const lastUserMsgText = win.eval('lastUserText');
+  check("Clicking the fix-something chip no longer sends the literal old trigger phrase 'I need to fix something'",
+    lastUserMsgText !== "I need to fix something" && lastUserMsgText !== "Necesito corregir algo");
+
+  // Simulate the exact broken AI message from Adrian's screenshot, and confirm the OLD trigger
+  // logic (still present as a safety net for any legacy/cached responses) still at least doesn't
+  // crash, even though the AI should no longer generate this message going forward
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  let threw = false;
+  try {
+    win2.eval(`smartChips("4. Work items/tasks\\n5. Materials purchased\\n6. Date (January 8th 2026)\\n\\nWhich one do you want to fix?")`);
+  } catch(e) { threw = true; }
+  check("Even if a legacy numbered-list message somehow appears, handling it does not crash the app",
+    !threw);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2578,6 +2622,7 @@ async function testGeneratePdfOpensForViewingNotDownload() {
     await testDeleteFromUncompletedList();
     await testUncompletedListNoTypeLabel();
     await testGeneratePdfOpensForViewingNotDownload();
+    await testStaleFreeConversationCorrectionFlowRemoved();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
