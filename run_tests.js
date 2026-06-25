@@ -1036,14 +1036,34 @@ async function testCombinedLaborMaterialsInvoice() {
   check("Correction menu for combined invoice offers Work/Tasks option", correctionAreaHtml.includes("Work") || correctionAreaHtml.includes("Tasks"));
   check("Correction menu for combined invoice offers Materials/Receipts option", correctionAreaHtml.includes("Materials") || correctionAreaHtml.includes("Receipts"));
 
-  // Test history list correctly labels combined invoices
+  // Test history list shows the new layout: number, date, customer, street address, amount
   win.eval(`
-    invoiceHistory = [{type:"both", invNum:30001, invoiceData:{job_address:"456 Job Site Rd", date:"June 3, 2026"}, receipts:[], jobPhotos:[], created_at:new Date().toISOString()}];
+    invoiceHistory = [{type:"both", invNum:30001, invoiceData:{
+      ordered_by:"Andrew Whallon", job_address:"456 Job Site Rd, Long Beach CA 90810", date:"June 3, 2026",
+      work_items:[{desc:"Task A",amount:500}], materials_items:[{vendor:"X",desc:"Y",date:"z",amount:50}]
+    }, receipts:[], jobPhotos:[], created_at:new Date().toISOString()}];
     renderHistoryList();
   `);
   const historyHtml = win.document.getElementById("historyList").innerHTML;
-  check("History list shows 'Labor & Materials' label for combined invoices, not just 'Materials'",
-    historyHtml.includes("Labor &amp; Materials") || historyHtml.includes("Labor & Materials"));
+  check("History list shows the invoice number", historyHtml.includes("#30001"));
+  check("History list shows the date", historyHtml.includes("June 3, 2026"));
+  check("History list shows the customer (ordered_by)", historyHtml.includes("Andrew Whallon"));
+  check("History list shows just the STREET address, not the full city/state/zip", historyHtml.includes("456 Job Site Rd") && !historyHtml.includes("Long Beach CA 90810"));
+  check("History list shows the total amount (labor + materials combined)", historyHtml.includes("550.00"));
+  check("History list no longer shows a Labor/Materials/Combined type label",
+    !historyHtml.includes("Labor & Materials") && !historyHtml.includes("Labor &amp; Materials") && !historyHtml.includes(">Materials<") && !historyHtml.includes(">Labor<"));
+
+  // Generic mode: customer should fall back to bill_to_name when ordered_by is blank
+  win.eval(`
+    invoiceHistory = [{type:"materials", invNum:30002, invoiceData:{
+      ordered_by:"", bill_to_name:"Generic Client Co", job_address:"789 Other St, Riverside CA 92501", date:"June 5, 2026",
+      work_items:[], materials_items:[{vendor:"X",desc:"Y",date:"z",amount:25}]
+    }, receipts:[], jobPhotos:[], created_at:new Date().toISOString()}];
+    renderHistoryList();
+  `);
+  const genericHistoryHtml = win.document.getElementById("historyList").innerHTML;
+  check("Generic mode (no ordered_by) falls back to showing bill_to_name as the customer",
+    genericHistoryHtml.includes("Generic Client Co"));
 }
 
 async function testPhotoOrientationCorrection() {
@@ -1596,12 +1616,14 @@ async function testSpanishTranslationOfDynamicLists() {
 
   // Populated history list
   win.eval(`
-    invoiceHistory = [{type:"both", invNum:1, invoiceData:{job_address:"123 Main St", date:"x", ordered_by:""}, receipts:[], jobPhotos:[], created_at:new Date().toISOString()}];
+    invoiceHistory = [{type:"both", invNum:1, invoiceData:{job_address:"123 Main St, Long Beach CA 90810", date:"x", ordered_by:"Test Customer", work_items:[{desc:"a",amount:10}], materials_items:[]}, receipts:[], jobPhotos:[], created_at:new Date().toISOString()}];
     renderHistoryList();
   `);
   const histHtml = win.document.getElementById("historyList").innerHTML;
-  check("History entry shows Spanish 'Trabajo y Materiales' label for combined invoices",
-    histHtml.includes("Trabajo y Materiales"));
+  check("History entry shows the Spanish 'Toca para ver' (Tap to view) text",
+    histHtml.includes("Toca para ver"));
+  check("History entry still shows the customer name and street address regardless of language",
+    histHtml.includes("Test Customer") && histHtml.includes("123 Main St"));
 
   // Address Manager: empty state, pre-loaded section, and Edit/Delete buttons
   win.eval(`contractorInfo.mode = "bplw"; showAddressManager();`);
