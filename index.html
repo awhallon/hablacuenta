@@ -863,10 +863,7 @@ Job Address: [full job address]
 ${invoiceType!=="materials"?`Work Performed: [list each task and price]\n`:""}${invoiceType!=="labor"?`Materials Purchased: [list each receipt: vendor, item, date, amount]\n`:""}Date: [invoice date]`}
 Do not combine or substitute fields — the Client Address field must be the client's billing address, never their email or phone. ${invoiceType!=="labor"?(lang==="es"?`Después del resumen, recuerda al usuario: "Recuerda, puedes guardar esta factura y agregar más recibos más tarde si lo necesitas." `:`After the summary, remind the user: "Remember, you can save this invoice and add more receipts later if you need to." `):""}Then ask ${lang==="es"?`"¿Todo se ve correcto, o quieres corregir algo?"`:`"Does everything look correct, or do you want to fix something?"`}
 
-CORRECTION HANDLING: If user says something needs fixing, list the collected fields as a numbered menu and ask which to change. Then:
-- If they pick Client, Ordered by, Street, Unit, or Date: ask only that specific question again
-- If they pick Work items/tasks: list ALL existing tasks with numbers (e.g. "1. Replace ceiling fan - $110  2. Paint ceiling - $480") and ask "Which task number do you want to change, or type 'add' to add a new task?"
-- If they pick a specific task number: ask "What should task [N] be? Give me the description and price."
+CORRECTION HANDLING: Once you have collected all the information and the user confirms ("everything's correct") OR says something needs fixing, respond with the final JSON immediately either way — do NOT ask which field needs fixing, do NOT list fields as a numbered menu, and do NOT have a back-and-forth about what to correct. The app itself provides a dedicated, fully interactive editor for every field (client, address, date, tasks, materials) once the structured invoice is built — corrections happen there, never in this conversation. Your only job is to get the data into the JSON; let the app handle any fixing afterward.
 
 YEAR CLARIFICATION: If the app tells you a date is missing a year and asks the user to clarify, and the user responds "It was [year]" or confirms the current year — update that specific date (add the year) and then re-emit the complete JSON with "done":true, exactly as before, with the corrected date included. Do not restart the whole interview. If the user instead says "a different year" without specifying which, ask "What year was it?" before re-emitting the JSON.
 - Make only the requested change, keep everything else the same.
@@ -1595,8 +1592,8 @@ function showConfirmChips(){
   const area=document.getElementById("chipArea");area.innerHTML="";
   const chip1=document.createElement("div");chip1.className="chip new";chip1.textContent=t("✅ Todo correcto","✅ Everything's correct");
   chip1.onclick=()=>{document.getElementById("userInput").value=t("Todo correcto","Everything is correct");sendMsg();};
-  const chip2=document.createElement("div");chip2.className="chip warn";chip2.textContent=t("✏️ Corregir algo","✏️ Fix something");
-  chip2.onclick=()=>{document.getElementById("userInput").value=t("Necesito corregir algo","I need to fix something");sendMsg();};
+  const chip2=document.createElement("div");chip2.className="chip warn";chip2.textContent=t("✏️ Continuar y corregir después","✏️ Continue, I'll fix it after");
+  chip2.onclick=()=>{document.getElementById("userInput").value=t("Continúa, lo corregiré después en la pantalla de la factura","Go ahead, I'll fix it after on the invoice screen");sendMsg();};
   area.appendChild(chip1);area.appendChild(chip2);
 }
 
