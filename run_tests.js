@@ -44,6 +44,13 @@ function freshDom() {
       // (not just their localStorage-quota-failure fallback) can actually be exercised.
       const FDBFactory = require("fake-indexeddb/lib/FDBFactory");
       window.indexedDB = new FDBFactory();
+      // jsdom doesn't implement URL.createObjectURL or a real window.open — shim both so the
+      // PDF-viewing code path (which calls these) can actually run instead of throwing.
+      if(!window.URL.createObjectURL) window.URL.createObjectURL = (blob) => "blob:mock-url-" + Math.random().toString(36).slice(2);
+      if(!window.URL.revokeObjectURL) window.URL.revokeObjectURL = () => {};
+      window.open = (url, target) => {
+        return { closed: false, location: { href: "" } };
+      };
     }
   });
   // Helper: access let/const top-level variables, which aren't exposed as window properties in jsdom's vm context
@@ -1346,7 +1353,6 @@ async function testMidConversationSaveAndResume() {
   win.eval(`renderIncompleteList()`);
   const incompleteHtml = win.document.getElementById("incompleteList").innerHTML;
   check("Uncompleted list shows 'In Progress' label for a saved conversation", incompleteHtml.includes("In Progress"));
-  check("Uncompleted list shows the invoice type (Labor) for this saved conversation", incompleteHtml.includes("Labor"));
 
   // Now resume it on what's effectively a fresh session
   const dom2 = freshDom();
@@ -1398,8 +1404,8 @@ async function testMidConversationSaveAndResume() {
     oldStyleEntries.length === 1 && !oldStyleEntries[0].kind);
   win4.eval(`renderIncompleteList()`);
   const oldStyleHtml = win4.document.getElementById("incompleteList").innerHTML;
-  check("Old-style finished-invoice entries still render with the original 'Materials —' label",
-    oldStyleHtml.includes("Materials —") && !oldStyleHtml.includes("In Progress"));
+  check("Old-style finished-invoice entries render the street address without a type label, and without the 'In Progress' status (since they're a different entry kind)",
+    oldStyleHtml.includes("456 Old Flow") && !oldStyleHtml.includes("Materials —") && !oldStyleHtml.includes("In Progress"));
 }
 
 async function testIndexedDBPhotoStorage() {
@@ -1611,8 +1617,8 @@ async function testSpanishTranslationOfDynamicLists() {
     renderIncompleteList();
   `);
   const incHtml = win.document.getElementById("incompleteList").innerHTML;
-  check("In-progress conversation entry shows Spanish 'Trabajo' and 'En Progreso' labels",
-    incHtml.includes("Trabajo") && incHtml.includes("En Progreso"));
+  check("In-progress conversation entry shows the Spanish 'En Progreso' status label",
+    incHtml.includes("En Progreso"));
 
   // Populated history list
   win.eval(`
@@ -2441,6 +2447,94 @@ async function testDeleteFromUncompletedList() {
     photo2AfterDelete === null);
 }
 
+async function testUncompletedListNoTypeLabel() {
+  console.log("\n=== TEST SUITE 39: Uncompleted List Drops Type Label (regression for Adrian's reported inconsistency with History) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // Finished-invoice-pending-receipts entries (the "Materials —" labeled ones in the screenshot)
+  win.eval(`
+    incompleteInvoices = [
+      {invoiceData:{job_address:"1995 Canal Ave, Long Beach CA 90810", date:"May 23, 2026"}, receipts:[], job_address:"1995 Canal Ave, Long Beach CA 90810", date:"May 23, 2026", receipts_count:0, saved_at:new Date().toISOString()}
+    ];
+    saveIncomplete();
+    renderIncompleteList();
+  `);
+  const finishedHtml = win.document.getElementById("incompleteList").innerHTML;
+  check("Finished-invoice-pending entries no longer show the 'Materials' type label",
+    !finishedHtml.includes(">Materials —") && !finishedHtml.includes("Materials —"));
+  check("The street address is still shown, just without the type prefix", finishedHtml.includes("1995 Canal Ave"));
+
+  // Mid-conversation entries (the ones that previously showed Labor/Materials/Combined)
+  ["labor","materials","both"].forEach(invType => {
+    win.eval(`
+      incompleteInvoices = [
+        {kind:"conversation", invoiceType:"${invType}", messages:[{role:"user",content:"x"}], convStage:"tasks", currentOrderedBy:"Test", contractorMode:"bplw", job_address:"123 Test St", jobPhotos:[], receipts:[], saved_at:new Date().toISOString()}
+      ];
+      renderIncompleteList();
+    `);
+    const convHtml = win.document.getElementById("incompleteList").innerHTML;
+    check(`Mid-conversation entry (type=${invType}) no longer shows a Labor/Materials/Combined type label`,
+      !convHtml.includes(">Labor<") && !convHtml.includes(">Materials<") && !convHtml.includes("Labor &amp; Materials") && !convHtml.includes("Labor & Materials"));
+    check(`Mid-conversation entry (type=${invType}) still shows 'In Progress' and the street address`,
+      convHtml.includes("In Progress") && convHtml.includes("123 Test St"));
+  });
+}
+
+async function testGeneratePdfOpensForViewingNotDownload() {
+  console.log("\n=== TEST SUITE 40: Generate PDF Opens for Viewing Instead of Forcing a Download (regression for Adrian's reported download-prompt bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`
+    contractorInfo.mode = "bplw";
+    invoiceType = "labor";
+    invoiceData = {
+      done:true, bill_to_name:"BPLW Management", bill_to_address:"PO Box 9395, Long Beach CA 90810", bill_to_email:"x", bill_to_phone:"",
+      ordered_by:"Andrew Whallon", job_address:"1001 Cherry Ave Unit 204, Long Beach CA 90813",
+      work_items:[{desc:"Dispose of mouse and mouse trap",amount:85},{desc:"Repair toilet",amount:60}], materials_items:[],
+      date:"April 3, 2026", has_materials:false, has_labor:true
+    };
+  `);
+
+  // generatePDF's source must no longer call doc.save() at all — that was the forced-download trigger
+  const generatePDFSource = win.eval('generatePDF.toString()');
+  check("generatePDF no longer calls doc.save() (which forced an immediate download)",
+    !generatePDFSource.includes("doc.save("));
+  check("generatePDF creates a blob URL to open for viewing instead", generatePDFSource.includes("createObjectURL"));
+  check("generatePDF opens the viewer window synchronously before any async work, to avoid mobile popup-blocking",
+    /window\.open\(""/.test(generatePDFSource) || generatePDFSource.indexOf('window.open("","_blank")') < generatePDFSource.indexOf("await buildPDF"));
+
+  // Actually calling it should not throw, and should still correctly record history / advance the counter
+  const startingLaborNum = win.eval('laborNum');
+  let threw = false;
+  try {
+    await win.eval(`generatePDF("labor")`);
+  } catch(e) { threw = true; }
+  check("Calling generatePDF (which now opens a viewer instead of downloading) does not throw", !threw);
+  check("generatePDF still correctly records the invoice in History", win.eval('invoiceHistory.length') === 1);
+  check("generatePDF still correctly advances the invoice number counter exactly once",
+    win.eval('laborNum') === startingLaborNum + 1);
+
+  // Calling it a second time on the same invoice should reuse the same number (same stability
+  // guarantee as before) and must NOT prompt anything like a "file already exists" dialog,
+  // since there's no actual filesystem download happening through this button anymore.
+  await win.eval(`generatePDF("labor")`);
+  check("Generating the same invoice's PDF twice still reuses the same invoice number",
+    win.eval('laborNum') === startingLaborNum + 1);
+  check("Generating the same invoice's PDF twice still produces only one History entry",
+    win.eval('invoiceHistory.length') === 1);
+
+  // The confirmation message should mention viewing/saving via browser or Share, not "downloaded"
+  const chatHtml = win.document.getElementById("chatBox").innerHTML;
+  check("Confirmation message no longer says the PDF was 'downloaded'",
+    !chatHtml.includes("PDF downloaded"));
+  check("Confirmation message mentions the browser's download option or Share Invoice as alternatives",
+    chatHtml.includes("Share Invoice") || chatHtml.includes("Compartir Factura"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2482,6 +2576,8 @@ async function testDeleteFromUncompletedList() {
     await testPhotoInputAllowsGallerySelection();
     await testInvoiceNumberStaysStableAcrossRepeatedShares();
     await testDeleteFromUncompletedList();
+    await testUncompletedListNoTypeLabel();
+    await testGeneratePdfOpensForViewingNotDownload();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
