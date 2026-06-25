@@ -1065,10 +1065,9 @@ function renderIncompleteList(){
   if(!incompleteInvoices.length){el.innerHTML=`<div style="font-size:13px;color:#888;padding:8px 0;">${t("No hay facturas pendientes.","No uncompleted invoices.")}</div>`;return;}
   el.innerHTML=incompleteInvoices.map((inv,i)=>{
     if(inv.kind==="conversation"){
-      const typeLabel=inv.invoiceType==="labor"?t("Trabajo","Labor"):inv.invoiceType==="materials"?t("Materiales","Materials"):t("Trabajo y Materiales","Labor & Materials");
       return `<div class="incomplete-item-row">
         <div class="incomplete-item-info" onclick="continueIncomplete(${i})">
-          <div class="incomplete-title">${typeLabel} — ${t("En Progreso","In Progress")}${inv.job_address?" — "+inv.job_address:""}</div>
+          <div class="incomplete-title">${t("En Progreso","In Progress")}${inv.job_address?" — "+inv.job_address:""}</div>
           <div class="incomplete-sub">${(inv.messages||[]).length} ${t("mensajes hasta ahora","messages so far")} · ${t("Toca para continuar","Tap to continue")}</div>
         </div>
         <button class="incomplete-del-btn" onclick="deleteIncomplete(${i})">${t("Eliminar","Delete")}</button>
@@ -1076,7 +1075,7 @@ function renderIncompleteList(){
     }
     return `<div class="incomplete-item-row">
       <div class="incomplete-item-info" onclick="continueIncomplete(${i})">
-        <div class="incomplete-title">${t("Materiales","Materials")} — ${inv.job_address||t("Trabajo Pendiente","Job TBD")}</div>
+        <div class="incomplete-title">${inv.job_address||t("Trabajo Pendiente","Job TBD")}</div>
         <div class="incomplete-sub">${inv.receipts_count||0} ${t("recibo(s)","receipt(s)")} · ${inv.date||t("Fecha Pendiente","Date TBD")} · ${t("Toca para continuar","Tap to continue")}</div>
       </div>
       <button class="incomplete-del-btn" onclick="deleteIncomplete(${i})">${t("Eliminar","Delete")}</button>
@@ -2407,13 +2406,29 @@ async function buildPDF(type,forceNum){
 }
 
 async function generatePDF(type,forceNum){
+  // Open the target window SYNCHRONOUSLY, before any async work, since mobile browsers
+  // (Chrome on Android especially) block window.open() calls that happen after a delay —
+  // even a few async steps later is enough to lose the "direct user gesture" connection
+  // and have the popup silently blocked.
+  const viewerWindow=window.open("","_blank");
   const built=await buildPDF(type,forceNum);
-  if(!built)return;
+  if(!built){ if(viewerWindow) viewerWindow.close(); return; }
   const {doc,fname,isLabor,isCombined,invNum,isFreshAssignment}=built;
-  doc.save(fname);
+  const blob=doc.output("blob");
+  const blobUrl=URL.createObjectURL(blob);
+  if(viewerWindow && !viewerWindow.closed){
+    viewerWindow.location.href=blobUrl;
+  } else {
+    // Popup was blocked despite opening it early — fall back to a same-tab navigation,
+    // which can't be blocked, as a last resort so the user can still see the PDF.
+    window.open(blobUrl,"_blank")||(window.location.href=blobUrl);
+  }
   recordInvoiceHistory(type,invNum);
   if(isFreshAssignment){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
-  addAIMsg(`📄 PDF downloaded: ${fname}. Tap "Share Invoice" to send it directly, or attach it manually from your Downloads.`);
+  addAIMsg(t(
+    `📄 Factura generada. Si quieres guardar una copia, usa la opción de descarga de tu navegador, o toca "Compartir Factura".`,
+    `📄 Invoice generated. If you'd like to save a copy, use your browser's download option, or tap "Share Invoice".`
+  ));
   document.getElementById("chatBox").scrollTop=document.getElementById("chatBox").scrollHeight;
 }
 
@@ -2431,7 +2446,10 @@ async function shareInvoicePDF(type,forceNum){
       if(isFreshAssignment){if(isCombined||isLabor){laborNum++;saveLaborNum();}else{matNum++;saveMatNum();}}
       addAIMsg("📤 Invoice shared!");
     }catch(e){
-      if(e.name!=="AbortError") addAIMsg("Share canceled or unavailable. Tap 'Generate PDF' to download instead.");
+      if(e.name!=="AbortError") addAIMsg(t(
+        "El compartir se canceló o no está disponible. Toca 'Generar PDF' para verla en su lugar.",
+        "Share canceled or unavailable. Tap 'Generate PDF' to view it instead."
+      ));
     }
   }else{
     // Fallback: browser doesn't support sharing files (e.g. desktop) — fall back to download
