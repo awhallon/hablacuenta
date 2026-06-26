@@ -31,11 +31,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .header-sub{font-size:12px;color:#888;margin-top:2px;}
 .header-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
 .lang-toggle{display:flex;border:1px solid #E5E7EB;border-radius:20px;overflow:hidden;}
+.lang-toggle.attn-highlight{animation:attnPulse 1.6s ease-in-out infinite;border-radius:20px;}
+@keyframes attnPulse{
+  0%{box-shadow:0 0 0 0 rgba(29,158,117,0.55);}
+  70%{box-shadow:0 0 0 7px rgba(29,158,117,0);}
+  100%{box-shadow:0 0 0 0 rgba(29,158,117,0);}
+}
 .lang-btn{padding:5px 13px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:#888;}
 .lang-btn.active{background:#111;color:#fff;}
 .lang-toggle-group{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}
 .lang-toggle-labeled{display:flex;align-items:center;gap:6px;}
-.lang-toggle-label{font-size:10px;color:#999;white-space:nowrap;}
+.lang-toggle-label{font-size:12px;color:#999;white-space:nowrap;}
 .chip.type-labor{border-color:#16A34A;color:#166534;background:#DCFCE7;}
 .chip.type-materials{border-color:#CA8A04;color:#854F0B;background:#FEF9C3;}
 .chip.type-combined{border-color:#7C3AED;color:#5B21B6;background:#F5EEFF;}
@@ -137,7 +143,7 @@ input[type=file]{display:none;}
         </div>
         <div class="lang-toggle-labeled">
           <span class="lang-toggle-label" id="invoiceLangLabel">Invoice in</span>
-          <div class="lang-toggle">
+          <div class="lang-toggle" id="invoiceLangToggle">
             <button class="lang-btn" id="btnInvES" onclick="setInvoiceLang('es')">ES</button>
             <button class="lang-btn active" id="btnInvEN" onclick="setInvoiceLang('en')">EN</button>
           </div>
@@ -933,6 +939,7 @@ function setInvoiceLang(l){
   invoiceLangExplicitlySet=true;
   document.getElementById("btnInvES").classList.toggle("active",l==="es");
   document.getElementById("btnInvEN").classList.toggle("active",l==="en");
+  unhighlightInvoiceLangToggle();
   // Does NOT reset the conversation — this only affects how the final PDF gets translated
   // when generated. Update the invoice preview (if one is showing) so the language-mismatch
   // notice reflects the new setting immediately.
@@ -1171,14 +1178,24 @@ function showWelcomeMessage(){
     "Welcome to Hablacuenta! 👋 The first thing to decide is which language you'd like the app to talk to you in. You can change this anytime using the switch at the top of the screen.\n\n¡Bienvenido a Hablacuenta! 👋 Lo primero es decidir en qué idioma quieres que la aplicación te hable. Puedes cambiarlo en cualquier momento con el interruptor en la parte superior de la pantalla."
   );
   addAIMsg(t(
-    "Una vez que hayas elegido, toca \"Continuar\" para configurar la información de tu negocio.\n\nEste app te ayuda a crear facturas profesionales con solo hablar — sin formularios complicados. Solo responde las preguntas y la factura se genera automáticamente.",
-    "Once you've chosen, tap \"Continue\" to set up your business information.\n\nThis app helps you create professional invoices just by talking — no complicated forms. Just answer the questions and the invoice gets built automatically."
+    "Una vez que hayas elegido, toca \"Continuar\" para configurar la información de tu negocio.\n\nEste app te ayuda a crear facturas profesionales con solo hablar — sin formularios complicados. Solo responde las preguntas y la factura se genera automáticamente.\n\nNota: hay un interruptor separado arriba para elegir en qué idioma se genera la factura final — esto puede ser diferente del idioma en que hablas con la app.",
+    "Once you've chosen, tap \"Continue\" to set up your business information.\n\nThis app helps you create professional invoices just by talking — no complicated forms. Just answer the questions and the invoice gets built automatically.\n\nNote: there's a separate switch above for choosing what language the final invoice is generated in — this can be different from the language you talk to the app in."
   ));
+  highlightInvoiceLangToggle();
   const area=document.getElementById("chipArea");area.innerHTML="";
   const chip=document.createElement("div");chip.className="chip new";
   chip.textContent=t("Continuar →","Continue →");
-  chip.onclick=()=>{area.innerHTML="";showSettings();};
+  chip.onclick=()=>{area.innerHTML="";unhighlightInvoiceLangToggle();showSettings();};
   area.appendChild(chip);
+}
+
+function highlightInvoiceLangToggle(){
+  const el=document.getElementById("invoiceLangToggle");
+  if(el) el.classList.add("attn-highlight");
+}
+function unhighlightInvoiceLangToggle(){
+  const el=document.getElementById("invoiceLangToggle");
+  if(el) el.classList.remove("attn-highlight");
 }
 
 function showInvoiceTypeChips(){
