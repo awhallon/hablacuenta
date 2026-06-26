@@ -2884,6 +2884,64 @@ async function testNavButtonsTwoRowLayout() {
     !!win.document.querySelector(".header-top"));
 }
 
+async function testNavButtonsHaveDistinctColors() {
+  console.log("\n=== TEST SUITE 49: Nav Buttons Have Five Distinct Colors (Andy's requested visual differentiation) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const buttonIds = ["navSettings","navClients","navAddresses","navUncompleted","navHistory"];
+  const colorClasses = buttonIds.map(id => {
+    const el = win.document.getElementById(id);
+    return Array.from(el.classList).find(c => c !== "nav-btn" && c !== "attn-highlight");
+  });
+  check("Every nav button has exactly one color class assigned",
+    colorClasses.every(c => !!c), `got: ${JSON.stringify(colorClasses)}`);
+  check("All five nav buttons have DIFFERENT color classes from each other (no duplicates)",
+    new Set(colorClasses).size === 5, `got: ${JSON.stringify(colorClasses)}`);
+
+  // Confirm each color class actually has a corresponding CSS rule with real color values
+  const styleBlock = win.document.querySelector("style").textContent;
+  colorClasses.forEach(cls => {
+    const ruleMatch = styleBlock.match(new RegExp(`\\.nav-btn\\.${cls}\\{([^}]*)\\}`));
+    check(`'.nav-btn.${cls}' has a CSS rule defining its color`,
+      !!ruleMatch && ruleMatch[1].includes("color:") && ruleMatch[1].includes("border-color:"));
+  });
+
+  // Uncompleted must keep its pre-existing orange color specifically (not change identity)
+  check("Uncompleted button specifically keeps the 'orange' color class",
+    win.document.getElementById("navUncompleted").classList.contains("orange"));
+}
+
+async function testHighlightTakesPrecedenceOverButtonColor() {
+  console.log("\n=== TEST SUITE 50: Onboarding Highlight Takes Precedence Over Button's Own Color (CSS specificity regression) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // The attn-highlight rule must be declared AFTER all individual color rules in the stylesheet,
+  // so it wins any CSS specificity tie and the yellow pulse is always visible during onboarding,
+  // regardless of which button (and therefore which color) is being highlighted.
+  const styleBlock = win.document.querySelector("style").textContent;
+  const highlightIndex = styleBlock.indexOf(".nav-btn.attn-highlight");
+  const colorIndices = ["orange","blue","purple","teal","pink"].map(c => styleBlock.indexOf(`.nav-btn.${c}{`));
+  check(".nav-btn.attn-highlight CSS rule exists", highlightIndex !== -1);
+  check("The attn-highlight rule appears AFTER every individual nav-btn color rule in the stylesheet (wins specificity ties)",
+    colorIndices.every(idx => idx !== -1 && idx < highlightIndex),
+    `highlight at ${highlightIndex}, colors at ${JSON.stringify(colorIndices)}`);
+
+  // Functional check: My Info has a color (blue) AND, during onboarding, the highlight class —
+  // confirm the element actually carries both classes simultaneously without one being removed
+  win.eval(`setLang('en')`);
+  win.eval(`setInvoiceLang('en')`);
+  await wait(100);
+  const myInfoBtn = win.document.getElementById("navSettings");
+  check("My Info button retains its 'blue' color class even while highlighted during onboarding",
+    myInfoBtn.classList.contains("blue"));
+  check("My Info button also carries 'attn-highlight' at the same time (both classes coexist)",
+    myInfoBtn.classList.contains("attn-highlight"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2935,6 +2993,8 @@ async function testNavButtonsTwoRowLayout() {
     await testHighlightPulseColorIsYellow();
     await testNavLinkTextDoesNotWrap();
     await testNavButtonsTwoRowLayout();
+    await testNavButtonsHaveDistinctColors();
+    await testHighlightTakesPrecedenceOverButtonColor();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
