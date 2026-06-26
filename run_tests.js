@@ -2612,6 +2612,78 @@ async function testBillingSetupDropdownReorderedAndReworded() {
     win.document.getElementById("optBplw").textContent.includes("Andrew Whallon") && win.document.getElementById("optBplw").textContent.includes("Richard Baisz"));
 }
 
+async function testToggleLabelFontSizeIncreased() {
+  console.log("\n=== TEST SUITE 43: Toggle Label Font Size Increased (regression for Andy's reported readability issue) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const styleBlock = win.document.querySelector("style").textContent;
+  const labelRuleMatch = styleBlock.match(/\.lang-toggle-label\{([^}]*)\}/);
+  check("The .lang-toggle-label CSS rule exists", !!labelRuleMatch);
+  if (labelRuleMatch) {
+    const fontSizeMatch = labelRuleMatch[1].match(/font-size:(\d+)px/);
+    check("Toggle label font size is larger than the old 10px (increased for readability)",
+      !!fontSizeMatch && parseInt(fontSizeMatch[1], 10) > 10,
+      `found: ${fontSizeMatch ? fontSizeMatch[1] + "px" : "no match"}`);
+  }
+
+  // Confirm the labels themselves are still present and correctly say what they should
+  check("'Talk to me in' label is present", win.document.getElementById("convLangLabel").textContent === "Talk to me in");
+  check("'Invoice in' label is present", win.document.getElementById("invoiceLangLabel").textContent === "Invoice in");
+}
+
+async function testInvoiceLangToggleHighlightOnOnboarding() {
+  console.log("\n=== TEST SUITE 44: Invoice Language Toggle Highlight During Onboarding (regression for the first-user Spanish-invoice confusion) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // A first-time user should see the invoice-language toggle highlighted immediately
+  check("isFirstTimeUser() is true on a fresh device", win.eval('isFirstTimeUser()') === true);
+  const toggleEl = win.document.getElementById("invoiceLangToggle");
+  check("The invoice-language toggle element exists and has a dedicated ID", !!toggleEl);
+  check("The invoice-language toggle is highlighted during first-time onboarding",
+    toggleEl.classList.contains("attn-highlight"));
+
+  // The conversation-language toggle should NOT be highlighted — only the invoice one,
+  // since that's specifically the toggle the real-world confusion was about
+  const convToggle = win.document.getElementById("btnES").closest(".lang-toggle");
+  check("The CONVERSATION-language toggle is NOT highlighted (only the invoice one is)",
+    !convToggle.classList.contains("attn-highlight"));
+
+  // The welcome message should mention the separate invoice-language toggle specifically
+  const chatHtml = win.document.getElementById("chatBox").innerHTML;
+  check("Welcome message explains there's a separate switch for the invoice's language",
+    chatHtml.toLowerCase().includes("invoice is generated in") || chatHtml.toLowerCase().includes("idioma se genera la factura"));
+
+  // Tapping the invoice-language toggle directly should remove the highlight
+  win.eval(`setInvoiceLang('es')`);
+  check("Tapping the invoice-language toggle directly removes the highlight",
+    !win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
+
+  // Re-triggering the welcome flow (e.g. via switching conversation language) should not
+  // crash or double-apply the highlight in a broken way — re-applying is idempotent
+  win.eval(`setLang('es')`);
+  await wait(100);
+  const toggleElAfter = win.document.getElementById("invoiceLangToggle");
+  check("Re-triggering the welcome flow re-applies the highlight cleanly (idempotent, no crash)",
+    toggleElAfter.classList.contains("attn-highlight"));
+
+  // Tapping "Continue" to proceed past onboarding should remove the highlight
+  win.eval(`document.querySelector('#chipArea .chip').click()`);
+  check("Tapping Continue removes the highlight", !win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
+
+  // A returning user (info already set) should never see the highlight at all
+  const dom2 = domWithPreseededStorage({
+    contractor_info: JSON.stringify({firstName:"Carlos", lastName:"Ruiz", businessName:"", address:"", phone:"", mode:"generic"})
+  });
+  const win2 = dom2.window;
+  await wait(300);
+  check("A returning user (not first-time) does NOT see the invoice-language toggle highlighted",
+    !win2.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2657,6 +2729,8 @@ async function testBillingSetupDropdownReorderedAndReworded() {
     await testGeneratePdfOpensForViewingNotDownload();
     await testStaleFreeConversationCorrectionFlowRemoved();
     await testBillingSetupDropdownReorderedAndReworded();
+    await testToggleLabelFontSizeIncreased();
+    await testInvoiceLangToggleHighlightOnOnboarding();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
