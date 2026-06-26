@@ -1568,7 +1568,7 @@ async function testSpanishTranslationOfStaticUI() {
   check("Settings 'Billing Setup' label translates to Spanish", win.document.getElementById("lblBillingSetup").textContent === "Configuración de Facturación");
   check("Settings 'Save' button translates to Spanish", win.document.getElementById("btnSaveSettings").textContent === "Guardar");
   check("Billing Setup dropdown options translate to Spanish",
-    win.document.getElementById("optBplw").textContent.includes("socios") && win.document.getElementById("optGeneric").textContent.includes("propios clientes"));
+    win.document.getElementById("optBplw").textContent.includes("Andrew Whallon") && win.document.getElementById("optGeneric").textContent.includes("propios clientes"));
 
   // Back buttons (every panel) should all say the Spanish equivalent
   ["mgrBackBtn","incBackBtn","historyBackBtn","settingsBackBtn","addrMgrBackBtn"].forEach(id => {
@@ -2579,6 +2579,39 @@ async function testStaleFreeConversationCorrectionFlowRemoved() {
     !threw);
 }
 
+async function testBillingSetupDropdownReorderedAndReworded() {
+  console.log("\n=== TEST SUITE 42: Billing Setup Dropdown Reordered and Reworded ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const select = win.document.getElementById("setMode");
+  const optionValues = Array.from(select.options).map(o => o.value);
+  check("Generic contractor option now comes FIRST in the dropdown (most users pick this)",
+    optionValues[0] === "generic");
+  check("BPLW Management option now comes SECOND (only a handful of users pick this)",
+    optionValues[1] === "bplw");
+
+  const bplwOption = win.document.getElementById("optBplw");
+  check("BPLW option names the two primary partners instead of generic 'partners & shared properties' wording",
+    bplwOption.textContent.includes("Andrew Whallon") && bplwOption.textContent.includes("Richard Baisz"));
+  check("BPLW option no longer uses the old vague 'partners & shared properties' phrasing",
+    !bplwOption.textContent.toLowerCase().includes("shared properties"));
+
+  // Confirm the reorder doesn't affect which mode actually gets selected for a given contractor
+  win.eval(`contractorInfo.mode = "bplw"; showSettings();`);
+  check("A BPLW-mode contractor still correctly shows BPLW selected in Settings, despite the option's new position",
+    win.document.getElementById("setMode").value === "bplw");
+  win.eval(`contractorInfo.mode = "generic"; showSettings();`);
+  check("A generic-mode contractor still correctly shows generic selected in Settings",
+    win.document.getElementById("setMode").value === "generic");
+
+  // Spanish translation matches the new wording
+  win.eval(`setLang('es')`);
+  check("Spanish BPLW option also names the two partners, not the old generic phrase",
+    win.document.getElementById("optBplw").textContent.includes("Andrew Whallon") && win.document.getElementById("optBplw").textContent.includes("Richard Baisz"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2623,6 +2656,7 @@ async function testStaleFreeConversationCorrectionFlowRemoved() {
     await testUncompletedListNoTypeLabel();
     await testGeneratePdfOpensForViewingNotDownload();
     await testStaleFreeConversationCorrectionFlowRemoved();
+    await testBillingSetupDropdownReorderedAndReworded();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
