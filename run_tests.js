@@ -1544,7 +1544,7 @@ async function testSpanishTranslationOfStaticUI() {
   check("Header subtitle translates to Spanish", win.document.getElementById("headerSubText").textContent === "Asistente de Facturas");
   check("Nav 'Uncompleted' translates to Spanish", win.document.getElementById("navUncompleted").textContent === "Pendientes");
   check("Nav 'History' translates to Spanish", win.document.getElementById("navHistory").textContent === "Historial");
-  check("Nav 'Clients' translates to Spanish", win.document.getElementById("navClients").textContent === "Clientes");
+  check("Nav 'My Clients' translates to Spanish", win.document.getElementById("navClients").textContent === "Mis Clientes");
   check("Nav 'Job Addresses' translates to Spanish", win.document.getElementById("navAddresses").textContent === "Direcciones de Trabajo");
   check("Nav 'My Info' translates to Spanish ('Mis Datos')", win.document.getElementById("navSettings").textContent === "Mis Datos");
 
@@ -1579,7 +1579,7 @@ async function testSpanishTranslationOfStaticUI() {
   win.eval(`setLang('en')`);
   await wait(100);
   check("Switching back to English restores the header subtitle", win.document.getElementById("headerSubText").textContent === "Invoice Assistant");
-  check("Switching back to English restores nav labels", win.document.getElementById("navClients").textContent === "Clients");
+  check("Switching back to English restores nav labels", win.document.getElementById("navClients").textContent === "My Clients");
 }
 
 async function testSpanishTranslationOfDynamicLists() {
@@ -1942,22 +1942,28 @@ async function testDualLanguageToggle() {
   check("The two toggles are genuinely distinct DOM elements, not aliases of each other",
     win.document.getElementById("btnES") !== win.document.getElementById("btnInvES"));
 
-  // By default, invoiceLang should track lang until explicitly overridden
-  check("Default: invoiceLang matches lang (both English)", win.eval('invoiceLang') === win.eval('lang'));
+  // By default both start in English, but they are fully independent — no auto-sync at all
+  check("Default: invoiceLang matches lang (both English) on a fresh load", win.eval('invoiceLang') === win.eval('lang'));
   win.eval(`setLang('es')`);
-  check("Switching conversation language to Spanish also moves invoiceLang to Spanish (not yet explicitly split)",
-    win.eval('invoiceLang') === "es");
+  check("Switching conversation language to Spanish does NOT move invoiceLang — the two are fully independent from the start",
+    win.eval('invoiceLang') === "en");
 
-  // Explicitly setting invoice language should decouple it from future conversation-language changes
+  // Setting invoice language independently has always worked, and still does
   win.eval(`setInvoiceLang('en')`);
   check("Explicitly setting invoice language to English while conversation stays Spanish works",
     win.eval('lang') === "es" && win.eval('invoiceLang') === "en");
   win.eval(`setLang('en')`);
   win.eval(`setLang('es')`);
-  check("After explicitly splitting the two, switching conversation language again does NOT drag invoiceLang along with it",
+  check("Switching conversation language back and forth never drags invoiceLang along with it",
     win.eval('invoiceLang') === "en");
+  win.eval(`setInvoiceLang('es')`);
+  win.eval(`setLang('en')`);
+  check("Switching conversation language to English does not drag an independently-set Spanish invoiceLang back",
+    win.eval('invoiceLang') === "es");
 
-  // The invoice preview should show a language-mismatch notice when the two differ
+  // The invoice preview should show a language-mismatch notice when the two differ.
+  // Set up a clean, explicit state: conversation in Spanish, invoice in English.
+  win.eval(`setLang('es'); setInvoiceLang('en');`);
   win.eval(`
     invoiceType = "labor";
     invoiceData = {done:true, bill_to_name:"Cliente", bill_to_address:"x", bill_to_email:"x", bill_to_phone:"",
@@ -1965,7 +1971,7 @@ async function testDualLanguageToggle() {
     showInvoicePreview(invoiceData);
   `);
   const mismatchHtml = win.document.getElementById("invoiceArea").innerHTML;
-  check("A language-mismatch notice appears when invoiceLang differs from the conversation language",
+  check("A language-mismatch notice appears when invoiceLang differs from the conversation language, naming the INVOICE's language (English)",
     mismatchHtml.toLowerCase().includes("english") || mismatchHtml.toLowerCase().includes("inglés"));
 
   // When the two match, no notice should appear
