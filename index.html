@@ -34,7 +34,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .lang-toggle{display:flex;border:1px solid #E5E7EB;border-radius:20px;overflow:hidden;}
 .attn-highlight{animation:attnPulse 1.6s ease-in-out infinite;}
 .lang-toggle.attn-highlight{border-radius:20px;}
-.nav-btn.attn-highlight{border-color:#FACC15;background:#FEF9E7;font-weight:700;}
 @keyframes attnPulse{
   0%{box-shadow:0 0 0 0 rgba(250,204,21,0.7);}
   70%{box-shadow:0 0 0 8px rgba(250,204,21,0);}
@@ -53,6 +52,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .nav-btn{font-family:inherit;font-size:12px;font-weight:500;color:#444;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:7px 14px;cursor:pointer;white-space:nowrap;}
 .nav-btn:active{background:#F3F4F6;}
 .nav-btn.orange{color:#D97706;border-color:#FBBF6B;background:#FFF8EE;}
+.nav-btn.blue{color:#1D4ED8;border-color:#93C5FD;background:#EFF6FF;}
+.nav-btn.purple{color:#7C3AED;border-color:#D8B4FE;background:#F5F3FF;}
+.nav-btn.teal{color:#0F766E;border-color:#5EEAD4;background:#F0FDFA;}
+.nav-btn.pink{color:#BE185D;border-color:#F9A8D4;background:#FDF2F8;}
+.nav-btn.attn-highlight{border-color:#FACC15;background:#FEF9E7;font-weight:700;}
 .chat-box{background:#fff;border-radius:14px;border:1px solid #E5E7EB;padding:1rem;min-height:300px;max-height:420px;overflow-y:auto;margin-bottom:1rem;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
 .msg{max-width:88%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.5;}
 .msg.ai{background:#F3F4F6;color:#111;align-self:flex-start;border-bottom-left-radius:4px;}
@@ -159,13 +163,13 @@ input[type=file]{display:none;}
     </div>
     <div class="nav-links">
       <div class="nav-row">
-        <button class="nav-btn" id="navSettings" onclick="showSettings()">My Info</button>
-        <button class="nav-btn" id="navClients" onclick="showManager()">My Clients</button>
-        <button class="nav-btn" id="navAddresses" onclick="showAddressManager()">Job Addresses</button>
+        <button class="nav-btn blue" id="navSettings" onclick="showSettings()">My Info</button>
+        <button class="nav-btn purple" id="navClients" onclick="showManager()">My Clients</button>
+        <button class="nav-btn teal" id="navAddresses" onclick="showAddressManager()">Job Addresses</button>
       </div>
       <div class="nav-row">
         <button class="nav-btn orange" id="navUncompleted" onclick="showIncomplete()">Uncompleted</button>
-        <button class="nav-btn" id="navHistory" onclick="showHistory()">History</button>
+        <button class="nav-btn pink" id="navHistory" onclick="showHistory()">History</button>
       </div>
     </div>
   </div>
