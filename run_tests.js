@@ -3122,6 +3122,33 @@ async function testFieldEditorBackButtonWarnsAboutDiscarding() {
     !menuHtml.includes("action-btn-danger"));
 }
 
+async function testPanelHeadingsMatchButtonColors() {
+  console.log("\n=== TEST SUITE 57: Panel Heading Colors Match Their Nav Button's Color (Andy's requested visual consistency) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const pairs = [
+    {headingId:"mgrTitle", navId:"navClients", expectedColor:"#7C3AED"},
+    {headingId:"incTitle", navId:"navUncompleted", expectedColor:"#D97706"},
+    {headingId:"historyTitle", navId:"navHistory", expectedColor:"#BE185D"},
+    {headingId:"settingsTitle", navId:"navSettings", expectedColor:"#1D4ED8"},
+    {headingId:"addrMgrTitle", navId:"navAddresses", expectedColor:"#0F766E"},
+  ];
+
+  pairs.forEach(({headingId, navId, expectedColor}) => {
+    const heading = win.document.getElementById(headingId);
+    check(`Heading #${headingId} has an inline color style set (not left as default black)`,
+      heading.getAttribute("style") && heading.getAttribute("style").includes("color:"));
+    check(`Heading #${headingId}'s color matches its corresponding nav button #${navId}'s text color exactly`,
+      heading.getAttribute("style").includes(expectedColor));
+  });
+
+  // Confirm headings remain readable/distinct from each other (no two panels accidentally share a color)
+  const colors = pairs.map(p => p.expectedColor);
+  check("All five heading colors are distinct from each other", new Set(colors).size === 5);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -3181,6 +3208,7 @@ async function testFieldEditorBackButtonWarnsAboutDiscarding() {
     await testPanelPurposeDescriptions();
     await testImprovedEmptyStatesWithNextAction();
     await testFieldEditorBackButtonWarnsAboutDiscarding();
+    await testPanelHeadingsMatchButtonColors();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
