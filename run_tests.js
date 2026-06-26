@@ -1546,7 +1546,7 @@ async function testSpanishTranslationOfStaticUI() {
   check("Nav 'History' translates to Spanish", win.document.getElementById("navHistory").textContent === "Historial");
   check("Nav 'Clients' translates to Spanish", win.document.getElementById("navClients").textContent === "Clientes");
   check("Nav 'Addresses' translates to Spanish", win.document.getElementById("navAddresses").textContent === "Direcciones");
-  check("Nav 'Settings' translates to Spanish", win.document.getElementById("navSettings").textContent === "Configuración");
+  check("Nav 'My Info' translates to Spanish ('Mis Datos')", win.document.getElementById("navSettings").textContent === "Mis Datos");
 
   // Panel titles
   win.eval(`showManager()`);
@@ -1864,20 +1864,27 @@ async function testFirstTimeWelcomeAndOnboarding() {
   await wait(100);
   check("Tapping the invoice toggle advances onboardingStage to 'done'", win.eval('onboardingStage') === "done");
 
-  // STAGE 3: final app explanation + Continue button
+  // STAGE 3: final app explanation + highlighted My Info nav link (no chip — the nav link itself is the action)
   const stage3Html = win.document.getElementById("chatBox").innerHTML;
   check("Stage 3 explains the app lets you create invoices by talking",
     stage3Html.toLowerCase().includes("talking") || stage3Html.toLowerCase().includes("just by talking"));
+  check("Stage 3 explains you can enter as much or as little business info as you want right now",
+    stage3Html.toLowerCase().includes("as little as you want") || stage3Html.toLowerCase().includes("tan poco como quieras"));
+  check("Stage 3 mentions tapping 'My Info' to get started",
+    stage3Html.includes("My Info"));
   check("Stage 3 does NOT show the normal 'What type of invoice' greeting yet",
     !stage3Html.includes("What type of invoice do you need"));
   check("Invoice-language toggle highlight is cleared by stage 3",
     !win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
-  const chipHtml = win.document.getElementById("chipArea").innerHTML;
-  check("A 'Continue' chip is shown to route the user into Settings", chipHtml.toLowerCase().includes("continue"));
+  check("Stage 3 shows no chips at all (the nav link itself is the call to action)",
+    win.document.getElementById("chipArea").innerHTML === "");
+  check("The My Info nav link IS highlighted at stage 3",
+    win.document.getElementById("navSettings").classList.contains("attn-highlight"));
 
-  // Clicking Continue should open Settings
-  win.eval(`document.querySelector('#chipArea .chip').click()`);
-  check("Clicking Continue opens the Settings panel", win.document.getElementById("settingsPanel").style.display === "block");
+  // Clicking the My Info nav link should open Settings and clear its highlight
+  win.eval(`document.getElementById("navSettings").click()`);
+  check("Clicking My Info opens the Settings panel", win.document.getElementById("settingsPanel").style.display === "block");
+  check("Clicking My Info clears its own highlight", !win.document.getElementById("navSettings").classList.contains("attn-highlight"));
 
   // Filling in info and saving should return to the normal chat flow automatically
   win.document.getElementById("setFirstName").value = "Maria";
@@ -2698,9 +2705,9 @@ async function testInvoiceLangToggleHighlightOnOnboarding() {
   check("Tapping the invoice-language toggle advances onboarding to the final 'done' stage",
     win.eval('onboardingStage') === "done");
 
-  // Tapping "Continue" to proceed past onboarding should keep the highlight off
-  win.eval(`document.querySelector('#chipArea .chip').click()`);
-  check("Tapping Continue keeps the invoice-language highlight off", !win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
+  // Proceeding past onboarding (tapping the My Info nav link) should keep the invoice highlight off
+  win.eval(`document.getElementById("navSettings").click()`);
+  check("Tapping My Info keeps the invoice-language highlight off", !win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
 
   // A returning user (info already set) should never see either highlight at all
   const dom2 = domWithPreseededStorage({
@@ -2720,32 +2727,33 @@ async function testBackButtonFromSettingsDuringOnboarding() {
   const win = dom.window;
   await wait(300);
 
-  // Walk through onboarding to reach stage 3 (Continue button)
+  // Walk through onboarding to reach stage 3 (highlighted My Info nav link)
   win.eval(`setLang('en')`);
   win.eval(`setInvoiceLang('en')`);
   await wait(100);
-  check("Onboarding reaches the final 'done' stage with a Continue chip", win.eval('onboardingStage') === "done");
-  check("The Continue chip is present before tapping it",
-    win.document.getElementById("chipArea").innerHTML.includes("Continue"));
+  check("Onboarding reaches the final 'done' stage with My Info highlighted", win.eval('onboardingStage') === "done");
+  check("The My Info nav link is highlighted before tapping it",
+    win.document.getElementById("navSettings").classList.contains("attn-highlight"));
 
-  // Tap Continue — this opens Settings and (per the original bug) used to permanently clear the chip
-  win.eval(`document.querySelector('#chipArea .chip').click()`);
-  check("Tapping Continue opens the Settings panel", win.document.getElementById("settingsPanel").style.display === "block");
-  check("The chip area is empty while Settings is open (expected — no chip needed while in Settings)",
-    win.document.getElementById("chipArea").innerHTML === "");
+  // Tap My Info — this opens Settings and (per the original bug class) used to permanently
+  // lose the call-to-action if the user backed out without saving
+  win.eval(`document.getElementById("navSettings").click()`);
+  check("Tapping My Info opens the Settings panel", win.document.getElementById("settingsPanel").style.display === "block");
+  check("The My Info highlight clears once tapped (now inside Settings)",
+    !win.document.getElementById("navSettings").classList.contains("attn-highlight"));
 
   // Tap Back WITHOUT saving — this is the exact scenario Adrian reported
   win.eval(`hideSettings()`);
   check("Tapping Back closes the Settings panel", win.document.getElementById("settingsPanel").style.display !== "block");
   check("Tapping Back returns to the main panel", win.document.getElementById("mainPanel").style.display === "block");
-  check("CRITICAL: the Continue chip is restored after backing out of Settings without saving — there must be a way back in",
-    win.document.getElementById("chipArea").innerHTML.includes("Continue"));
+  check("CRITICAL: the My Info highlight is restored after backing out without saving — there must be a clear way back in",
+    win.document.getElementById("navSettings").classList.contains("attn-highlight"));
   check("Still a first-time user after backing out without saving (no info was actually entered)",
     win.eval('isFirstTimeUser()') === true);
 
-  // Tapping the restored Continue chip should correctly re-open Settings
-  win.eval(`document.querySelector('#chipArea .chip').click()`);
-  check("Tapping the restored Continue chip successfully re-opens Settings",
+  // Tapping My Info again should correctly re-open Settings
+  win.eval(`document.getElementById("navSettings").click()`);
+  check("Tapping the re-highlighted My Info link successfully re-opens Settings",
     win.document.getElementById("settingsPanel").style.display === "block");
 
   // This time, actually fill in info and save — confirm the whole flow still completes correctly
@@ -2762,7 +2770,7 @@ async function testBackButtonFromSettingsDuringOnboarding() {
     postSaveChatHtml.includes("What type of invoice do you need") && postSaveChatHtml.includes("Jose"));
 
   // Confirm backing out of Settings AFTER onboarding is complete (normal returning-user case)
-  // does NOT incorrectly re-show a Continue chip, since that's only relevant during onboarding
+  // does NOT incorrectly highlight My Info, since that's only relevant during onboarding
   const dom2 = domWithPreseededStorage({
     contractor_info: JSON.stringify({firstName:"Maria", lastName:"Lopez", businessName:"", address:"", phone:"", mode:"generic"})
   });
@@ -2770,8 +2778,63 @@ async function testBackButtonFromSettingsDuringOnboarding() {
   await wait(300);
   win2.eval(`showSettings()`);
   win2.eval(`hideSettings()`);
-  check("For a RETURNING user (not onboarding), backing out of Settings does NOT incorrectly show a Continue chip",
-    !win2.document.getElementById("chipArea").innerHTML.includes("Continue"));
+  check("For a RETURNING user (not onboarding), backing out of Settings does NOT incorrectly highlight My Info",
+    !win2.document.getElementById("navSettings").classList.contains("attn-highlight"));
+}
+
+async function testHighlightPulseColorIsYellow() {
+  console.log("\n=== TEST SUITE 46: Highlight Pulse Color Changed to Bright Yellow (regression for Andy's reported visibility concern) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const styleBlock = win.document.querySelector("style").textContent;
+  const keyframesMatch = styleBlock.match(/@keyframes attnPulse\{([^]*?)\}\s*\.lang-btn/) || styleBlock.match(/@keyframes attnPulse\{([^]*?)\n\}/);
+  check("The attnPulse keyframes animation exists", !!keyframesMatch);
+  if (keyframesMatch) {
+    const keyframesBody = keyframesMatch[1];
+    check("Pulse color is NOT the old green (rgba(29,158,117,...))", !keyframesBody.includes("29,158,117"));
+    check("Pulse color uses a yellow/gold RGB value (250,204,21 — Tailwind's 'yellow-400')",
+      keyframesBody.includes("250,204,21"));
+  }
+
+  // The nav-link variant must also exist and be visually distinct (bold + colored text),
+  // not just relying on the box-shadow pulse alone, since plain underlined nav text is small
+  check(".nav-link.attn-highlight CSS rule exists for the My Info link highlight",
+    styleBlock.includes(".nav-link.attn-highlight"));
+  const navLinkRuleMatch = styleBlock.match(/\.nav-link\.attn-highlight\{([^}]*)\}/);
+  check("The nav-link highlight makes the text bold for visibility",
+    !!navLinkRuleMatch && navLinkRuleMatch[1].includes("font-weight:700"));
+
+  // Confirm all three highlight points actually use the shared .attn-highlight class,
+  // so a single color change affects all of them consistently
+  win.eval(`highlightConvLangToggle()`);
+  check("Conversation toggle highlight uses the shared attn-highlight class",
+    win.document.getElementById("btnES").closest(".lang-toggle").classList.contains("attn-highlight"));
+  win.eval(`highlightInvoiceLangToggle()`);
+  check("Invoice toggle highlight uses the shared attn-highlight class",
+    win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
+  win.eval(`highlightMyInfoNavLink()`);
+  check("My Info nav link highlight uses the shared attn-highlight class",
+    win.document.getElementById("navSettings").classList.contains("attn-highlight"));
+}
+
+async function testNavLinkTextDoesNotWrap() {
+  console.log("\n=== TEST SUITE 47: Nav Link Text Does Not Wrap (regression for Andy's reported 'My Info' two-line bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const styleBlock = win.document.querySelector("style").textContent;
+  const navLinkRuleMatch = styleBlock.match(/\.nav-link\{([^}]*)\}/);
+  check(".nav-link CSS rule exists", !!navLinkRuleMatch);
+  check("Nav link text has white-space:nowrap, preventing 'My Info' from breaking onto two lines",
+    !!navLinkRuleMatch && navLinkRuleMatch[1].includes("white-space:nowrap"));
+
+  // Confirm the actual link text content is correct
+  check("The nav link reads 'My Info' in English", win.document.getElementById("navSettings").textContent === "My Info");
+  win.eval(`setLang('es')`);
+  check("The nav link reads 'Mis Datos' in Spanish", win.document.getElementById("navSettings").textContent === "Mis Datos");
 }
 
 (async () => {
@@ -2822,6 +2885,8 @@ async function testBackButtonFromSettingsDuringOnboarding() {
     await testToggleLabelFontSizeIncreased();
     await testInvoiceLangToggleHighlightOnOnboarding();
     await testBackButtonFromSettingsDuringOnboarding();
+    await testHighlightPulseColorIsYellow();
+    await testNavLinkTextDoesNotWrap();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
