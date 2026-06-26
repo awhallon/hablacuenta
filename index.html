@@ -123,6 +123,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .client-info span{display:block;font-size:11px;color:#888;}
 .del-btn{padding:5px 12px;border-radius:8px;border:1px solid #E5E7EB;background:#fff;color:#888;cursor:pointer;font-size:12px;}
 .back-btn{width:100%;margin-top:10px;padding:10px;border-radius:12px;border:1px solid #E5E7EB;background:#fff;color:#111;cursor:pointer;font-size:14px;}
+.action-row{display:flex;gap:10px;}
+.action-btn-danger{flex:1;padding:12px;border-radius:12px;border:1.5px solid #DC2626;background:#FEF2F2;color:#B91C1C;cursor:pointer;font-size:14px;font-weight:600;}
+.action-btn-save{flex:1;padding:12px;border-radius:12px;border:1.5px solid #1D9E75;background:#F0FDF9;color:#0F6E56;cursor:pointer;font-size:14px;font-weight:600;}
 .incomplete-item{background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;}
 .incomplete-item:active{transform:scale(0.98);}
 .incomplete-item-row{background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
@@ -229,10 +232,12 @@ input[type=file]{display:none;}
         <option id="optGeneric" value="generic">My own clients (general contractor)</option>
         <option id="optBplw" value="bplw">BPLW Management (Andrew Whallon &amp; Richard Baisz)</option>
       </select>
-      <button class="pdf-btn" id="btnSaveSettings" onclick="saveSettingsForm()">Save</button>
       <div id="settingsSavedMsg" style="display:none;color:#16A34A;font-size:13px;margin-top:10px;text-align:center;">✓ Saved</div>
     </div>
-    <button class="back-btn" id="settingsBackBtn" onclick="hideSettings()">← Back</button>
+    <div class="action-row">
+      <button class="action-btn-danger" id="settingsBackBtn" onclick="hideSettings()">← Back, Do Not Save</button>
+      <button class="action-btn-save" id="btnSaveSettings" onclick="saveSettingsForm()">Save</button>
+    </div>
   </div>
 
   <div id="addressManagerPanel" style="display:none;">
@@ -925,7 +930,7 @@ function applyStaticTranslations(){
   set("optGeneric","Mis propios clientes (contratista general)","My own clients (general contractor)");
   set("optBplw","BPLW Management (Andrew Whallon y Richard Baisz)","BPLW Management (Andrew Whallon & Richard Baisz)");
   set("btnSaveSettings","Guardar","Save");
-  set("settingsBackBtn","← Atrás","← Back");
+  set("settingsBackBtn","← Atrás, No Guardar","← Back, Do Not Save");
   set("addrMgrTitle","Administrar Direcciones de Trabajo","Manage Job Addresses");
   set("btnAddNewAddress","+ Agregar nueva dirección","+ Add new address");
   set("addrMgrBackBtn","← Atrás","← Back");
