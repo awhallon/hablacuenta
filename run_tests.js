@@ -1545,7 +1545,7 @@ async function testSpanishTranslationOfStaticUI() {
   check("Nav 'Uncompleted' translates to Spanish", win.document.getElementById("navUncompleted").textContent === "Pendientes");
   check("Nav 'History' translates to Spanish", win.document.getElementById("navHistory").textContent === "Historial");
   check("Nav 'Clients' translates to Spanish", win.document.getElementById("navClients").textContent === "Clientes");
-  check("Nav 'Addresses' translates to Spanish", win.document.getElementById("navAddresses").textContent === "Direcciones");
+  check("Nav 'Job Addresses' translates to Spanish", win.document.getElementById("navAddresses").textContent === "Direcciones de Trabajo");
   check("Nav 'My Info' translates to Spanish ('Mis Datos')", win.document.getElementById("navSettings").textContent === "Mis Datos");
 
   // Panel titles
@@ -1558,7 +1558,7 @@ async function testSpanishTranslationOfStaticUI() {
   win.eval(`showSettings()`);
   check("'Your Business Info' panel title translates to Spanish", win.document.getElementById("settingsTitle").textContent === "Información de tu Negocio");
   win.eval(`showAddressManager()`);
-  check("'Manage Addresses' panel title translates to Spanish", win.document.getElementById("addrMgrTitle").textContent === "Administrar Direcciones");
+  check("'Manage Job Addresses' panel title translates to Spanish", win.document.getElementById("addrMgrTitle").textContent === "Administrar Direcciones de Trabajo");
 
   // Settings field labels
   check("Settings 'First Name' label translates to Spanish", win.document.getElementById("lblFirstName").textContent === "Nombre");
@@ -2798,13 +2798,12 @@ async function testHighlightPulseColorIsYellow() {
       keyframesBody.includes("250,204,21"));
   }
 
-  // The nav-link variant must also exist and be visually distinct (bold + colored text),
-  // not just relying on the box-shadow pulse alone, since plain underlined nav text is small
-  check(".nav-link.attn-highlight CSS rule exists for the My Info link highlight",
-    styleBlock.includes(".nav-link.attn-highlight"));
-  const navLinkRuleMatch = styleBlock.match(/\.nav-link\.attn-highlight\{([^}]*)\}/);
-  check("The nav-link highlight makes the text bold for visibility",
-    !!navLinkRuleMatch && navLinkRuleMatch[1].includes("font-weight:700"));
+  // The nav button highlight variant must also exist and be visually distinct
+  check(".nav-btn.attn-highlight CSS rule exists for the My Info link highlight",
+    styleBlock.includes(".nav-btn.attn-highlight"));
+  const navBtnRuleMatch = styleBlock.match(/\.nav-btn\.attn-highlight\{([^}]*)\}/);
+  check("The nav-btn highlight makes the text bold for visibility",
+    !!navBtnRuleMatch && navBtnRuleMatch[1].includes("font-weight:700"));
 
   // Confirm all three highlight points actually use the shared .attn-highlight class,
   // so a single color change affects all of them consistently
@@ -2820,21 +2819,63 @@ async function testHighlightPulseColorIsYellow() {
 }
 
 async function testNavLinkTextDoesNotWrap() {
-  console.log("\n=== TEST SUITE 47: Nav Link Text Does Not Wrap (regression for Andy's reported 'My Info' two-line bug) ===");
+  console.log("\n=== TEST SUITE 47: Nav Button Text Does Not Wrap (regression for Andy's reported 'My Info' two-line bug) ===");
   const dom = freshDom();
   const win = dom.window;
   await wait(300);
 
   const styleBlock = win.document.querySelector("style").textContent;
-  const navLinkRuleMatch = styleBlock.match(/\.nav-link\{([^}]*)\}/);
-  check(".nav-link CSS rule exists", !!navLinkRuleMatch);
-  check("Nav link text has white-space:nowrap, preventing 'My Info' from breaking onto two lines",
-    !!navLinkRuleMatch && navLinkRuleMatch[1].includes("white-space:nowrap"));
+  const navBtnRuleMatch = styleBlock.match(/\.nav-btn\{([^}]*)\}/);
+  check(".nav-btn CSS rule exists", !!navBtnRuleMatch);
+  check("Nav button text has white-space:nowrap, preventing 'My Info' from breaking onto two lines",
+    !!navBtnRuleMatch && navBtnRuleMatch[1].includes("white-space:nowrap"));
 
-  // Confirm the actual link text content is correct
-  check("The nav link reads 'My Info' in English", win.document.getElementById("navSettings").textContent === "My Info");
+  // Confirm the actual button text content is correct
+  check("The nav button reads 'My Info' in English", win.document.getElementById("navSettings").textContent === "My Info");
   win.eval(`setLang('es')`);
-  check("The nav link reads 'Mis Datos' in Spanish", win.document.getElementById("navSettings").textContent === "Mis Datos");
+  check("The nav button reads 'Mis Datos' in Spanish", win.document.getElementById("navSettings").textContent === "Mis Datos");
+}
+
+async function testNavButtonsTwoRowLayout() {
+  console.log("\n=== TEST SUITE 48: Nav Buttons Two-Row Layout (Andy's requested reorganization) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const navLinks = win.document.querySelector(".nav-links");
+  check(".nav-links container exists", !!navLinks);
+  const rows = navLinks.querySelectorAll(".nav-row");
+  check("There are exactly two nav rows", rows.length === 2);
+
+  const row1Ids = Array.from(rows[0].querySelectorAll(".nav-btn")).map(b => b.id);
+  const row2Ids = Array.from(rows[1].querySelectorAll(".nav-btn")).map(b => b.id);
+  check("Row 1 contains My Info, Clients, and Job Addresses in that order",
+    row1Ids[0] === "navSettings" && row1Ids[1] === "navClients" && row1Ids[2] === "navAddresses",
+    `got: ${JSON.stringify(row1Ids)}`);
+  check("Row 2 contains Uncompleted and History in that order",
+    row2Ids[0] === "navUncompleted" && row2Ids[1] === "navHistory",
+    `got: ${JSON.stringify(row2Ids)}`);
+
+  // Every nav element must be a real <button>, not a <span>, per the requested button styling
+  const allNavEls = navLinks.querySelectorAll("#navSettings, #navClients, #navAddresses, #navUncompleted, #navHistory");
+  check("All five nav elements are actual <button> elements (button-style, not plain text links)",
+    Array.from(allNavEls).every(el => el.tagName === "BUTTON"));
+
+  // The Uncompleted button should retain its distinct orange styling
+  check("The Uncompleted button retains the 'orange' class for its distinct styling",
+    win.document.getElementById("navUncompleted").classList.contains("orange"));
+
+  // Confirm each button still correctly triggers its panel when clicked
+  win.eval(`document.getElementById("navClients").click()`);
+  check("Clicking the Clients button (now in row 1) still opens the Clients panel",
+    win.document.getElementById("managerPanel").style.display === "block");
+  win.eval(`document.getElementById("navHistory").click()`);
+  check("Clicking the History button (now in row 2) still opens the History panel",
+    win.document.getElementById("historyPanel").style.display === "block");
+
+  // Confirm the header is structured with a distinct top row (name+toggles) separate from nav rows
+  check("The header has a dedicated .header-top section for the name and language toggles",
+    !!win.document.querySelector(".header-top"));
 }
 
 (async () => {
@@ -2887,6 +2928,7 @@ async function testNavLinkTextDoesNotWrap() {
     await testBackButtonFromSettingsDuringOnboarding();
     await testHighlightPulseColorIsYellow();
     await testNavLinkTextDoesNotWrap();
+    await testNavButtonsTwoRowLayout();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
