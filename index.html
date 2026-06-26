@@ -1011,6 +1011,18 @@ function showSettings(){
 function hideSettings(){
   document.getElementById("settingsPanel").style.display="none";
   document.getElementById("mainPanel").style.display="block";
+  // If the user backs out of Settings without saving during first-time onboarding, the
+  // Continue chip was already removed when they tapped it the first time — restore it so
+  // there's still a way back into Settings, rather than leaving them with no path forward.
+  if(isFirstTimeUser() && onboardingStage==="done"){
+    const area=document.getElementById("chipArea");
+    if(!area.innerHTML){
+      const chip=document.createElement("div");chip.className="chip new";
+      chip.textContent=t("Continuar →","Continue →");
+      chip.onclick=()=>{area.innerHTML="";showSettings();};
+      area.appendChild(chip);
+    }
+  }
 }
 function saveSettingsForm(){
   const firstName=document.getElementById("setFirstName").value.trim();
