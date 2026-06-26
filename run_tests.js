@@ -1818,30 +1818,60 @@ async function testAddressParsingAndBuilding() {
 }
 
 async function testFirstTimeWelcomeAndOnboarding() {
-  console.log("\n=== TEST SUITE 30: First-Time Welcome Message and Onboarding Flow (regression for Adrian's reported hardcoded-Alfonso bug) ===");
+  console.log("\n=== TEST SUITE 30: First-Time Welcome Message and Sequenced Onboarding Flow ===");
   const dom = freshDom();
   const win = dom.window;
   await wait(300);
 
   check("isFirstTimeUser() returns true on a genuinely fresh device", win.eval('isFirstTimeUser()') === true);
-  const chatHtml = win.document.getElementById("chatBox").innerHTML;
-  check("Welcome message explains the app lets you create invoices by talking",
-    chatHtml.toLowerCase().includes("talking") || chatHtml.toLowerCase().includes("just by talking"));
-  check("Welcome message does NOT show the normal 'What type of invoice' greeting yet",
-    !chatHtml.includes("What type of invoice do you need"));
-  check("Welcome message does NOT show invoice-type chips yet (nothing to invoice for until info is set)",
-    win.document.getElementById("chipArea").innerHTML === "" || !win.document.getElementById("chipArea").innerHTML.includes("Labor"));
+  check("Onboarding starts at the 'lang' stage", win.eval('onboardingStage') === "lang");
 
-  // The very first message must be bilingual (both English and Spanish), since the user
-  // hasn't chosen a language yet, and must explain the toggle at the top of the screen.
-  check("First welcome message is shown in English", chatHtml.includes("Welcome to Hablacuenta"));
-  check("First welcome message is ALSO shown in Spanish in the same message (bilingual, no language chosen yet)",
-    chatHtml.includes("Bienvenido a Hablacuenta"));
-  check("First welcome message mentions the language toggle/switch at the top of the screen (English)",
-    chatHtml.toLowerCase().includes("switch at the top"));
-  check("First welcome message mentions the language toggle/switch at the top of the screen (Spanish)",
-    chatHtml.toLowerCase().includes("interruptor en la parte superior"));
+  // STAGE 1: conversation language choice — bilingual message, conversation toggle highlighted
+  const stage1Html = win.document.getElementById("chatBox").innerHTML;
+  check("Stage 1 message is shown in English", stage1Html.includes("Welcome to Hablacuenta"));
+  check("Stage 1 message is ALSO shown in Spanish (bilingual, no language chosen yet)",
+    stage1Html.includes("Bienvenido a Hablacuenta"));
+  check("Stage 1 does NOT yet mention the automatic translation feature (that's stage 2)",
+    !stage1Html.toLowerCase().includes("translation"));
+  check("Stage 1 shows NO chips yet (the toggle itself is the action, not a chip)",
+    win.document.getElementById("chipArea").innerHTML === "");
+  const convToggleEl = win.document.getElementById("btnES").closest(".lang-toggle");
+  check("The CONVERSATION-language toggle is highlighted at stage 1", convToggleEl.classList.contains("attn-highlight"));
+  const invToggleEl = win.document.getElementById("invoiceLangToggle");
+  check("The invoice-language toggle is NOT highlighted yet at stage 1", !invToggleEl.classList.contains("attn-highlight"));
 
+  // Tapping EN (already the default) should still advance the stage, since it's a deliberate choice
+  win.eval(`setLang('en')`);
+  await wait(100);
+  check("Tapping the conversation toggle advances onboardingStage to 'invoiceLang'",
+    win.eval('onboardingStage') === "invoiceLang");
+
+  // STAGE 2: invoice language choice — mentions automatic translation, invoice toggle highlighted
+  const stage2Html = win.document.getElementById("chatBox").innerHTML;
+  check("Stage 2 message mentions the automatic translation feature",
+    stage2Html.toLowerCase().includes("translation"));
+  check("Stage 2 message explains they can change the invoice language later for different clients",
+    stage2Html.toLowerCase().includes("clients") || stage2Html.toLowerCase().includes("clientes"));
+  check("Stage 2 shows no chips (the toggle is the action)", win.document.getElementById("chipArea").innerHTML === "");
+  const convToggleElStage2 = win.document.getElementById("btnES").closest(".lang-toggle");
+  check("The conversation-language toggle is NO LONGER highlighted at stage 2",
+    !convToggleElStage2.classList.contains("attn-highlight"));
+  check("The invoice-language toggle IS highlighted at stage 2",
+    win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
+
+  // Tapping the invoice toggle should advance to the final stage
+  win.eval(`setInvoiceLang('en')`);
+  await wait(100);
+  check("Tapping the invoice toggle advances onboardingStage to 'done'", win.eval('onboardingStage') === "done");
+
+  // STAGE 3: final app explanation + Continue button
+  const stage3Html = win.document.getElementById("chatBox").innerHTML;
+  check("Stage 3 explains the app lets you create invoices by talking",
+    stage3Html.toLowerCase().includes("talking") || stage3Html.toLowerCase().includes("just by talking"));
+  check("Stage 3 does NOT show the normal 'What type of invoice' greeting yet",
+    !stage3Html.includes("What type of invoice do you need"));
+  check("Invoice-language toggle highlight is cleared by stage 3",
+    !win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
   const chipHtml = win.document.getElementById("chipArea").innerHTML;
   check("A 'Continue' chip is shown to route the user into Settings", chipHtml.toLowerCase().includes("continue"));
 
@@ -1875,22 +1905,20 @@ async function testFirstTimeWelcomeAndOnboarding() {
   check("A returning user sees the normal greeting with their name",
     win2.document.getElementById("chatBox").innerHTML.includes("Carlos"));
 
-  // Toggling the language DURING the welcome flow (before tapping Continue) should re-show
-  // the welcome flow with the second message and Continue button now in the chosen language,
-  // while the bilingual first message is always shown regardless.
+  // Tapping the conversation toggle is itself the deliberate stage-1 choice, so it should
+  // advance to stage 2 immediately (now shown in Spanish), not re-display stage 1.
   const dom3 = freshDom();
   const win3 = dom3.window;
   await wait(300);
   win3.eval(`setLang('es')`);
   await wait(100);
   const esChatHtml = win3.document.getElementById("chatBox").innerHTML;
-  check("Toggling to Spanish during welcome still shows the bilingual first message (English half)",
-    esChatHtml.includes("Welcome to Hablacuenta"));
-  check("Toggling to Spanish during welcome still shows the bilingual first message (Spanish half)",
-    esChatHtml.includes("Bienvenido a Hablacuenta"));
-  const esChipHtml = win3.document.getElementById("chipArea").innerHTML;
-  check("After switching to Spanish during welcome, the second message's chip now says 'Continuar' instead of 'Continue'",
-    esChipHtml.includes("Continuar"));
+  check("Tapping the conversation toggle to Spanish advances to stage 2, now shown in Spanish",
+    esChatHtml.toLowerCase().includes("traducción"));
+  check("Stage 1's bilingual message is no longer shown after advancing past it",
+    !esChatHtml.includes("Welcome to Hablacuenta"));
+  check("After tapping the conversation toggle once, onboarding has advanced to invoiceLang stage",
+    win3.eval('onboardingStage') === "invoiceLang");
   check("Still a first-time user after just toggling language (no business info entered yet)",
     win3.eval('isFirstTimeUser()') === true);
 }
@@ -2634,47 +2662,47 @@ async function testToggleLabelFontSizeIncreased() {
 }
 
 async function testInvoiceLangToggleHighlightOnOnboarding() {
-  console.log("\n=== TEST SUITE 44: Invoice Language Toggle Highlight During Onboarding (regression for the first-user Spanish-invoice confusion) ===");
+  console.log("\n=== TEST SUITE 44: Invoice Language Toggle Highlight During Sequenced Onboarding ===");
   const dom = freshDom();
   const win = dom.window;
   await wait(300);
 
-  // A first-time user should see the invoice-language toggle highlighted immediately
+  // At stage 1 (conversation language), the invoice toggle should NOT be highlighted yet —
+  // only the conversation toggle is, since the sequence hasn't reached the invoice step.
   check("isFirstTimeUser() is true on a fresh device", win.eval('isFirstTimeUser()') === true);
   const toggleEl = win.document.getElementById("invoiceLangToggle");
   check("The invoice-language toggle element exists and has a dedicated ID", !!toggleEl);
-  check("The invoice-language toggle is highlighted during first-time onboarding",
-    toggleEl.classList.contains("attn-highlight"));
-
-  // The conversation-language toggle should NOT be highlighted — only the invoice one,
-  // since that's specifically the toggle the real-world confusion was about
+  check("The invoice-language toggle is NOT highlighted at stage 1 (only the conversation toggle is)",
+    !toggleEl.classList.contains("attn-highlight"));
   const convToggle = win.document.getElementById("btnES").closest(".lang-toggle");
-  check("The CONVERSATION-language toggle is NOT highlighted (only the invoice one is)",
-    !convToggle.classList.contains("attn-highlight"));
+  check("The conversation-language toggle IS highlighted at stage 1",
+    convToggle.classList.contains("attn-highlight"));
 
-  // The welcome message should mention the separate invoice-language toggle specifically
+  // Advancing past stage 1 (tapping the conversation toggle) should highlight the invoice toggle
+  win.eval(`setLang('en')`);
+  await wait(100);
+  check("After advancing past stage 1, the invoice-language toggle IS now highlighted",
+    win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
+  check("After advancing past stage 1, the conversation-language toggle is no longer highlighted",
+    !win.document.getElementById("btnES").closest(".lang-toggle").classList.contains("attn-highlight"));
+
+  // The stage-2 message should mention the separate invoice-language toggle and translation feature
   const chatHtml = win.document.getElementById("chatBox").innerHTML;
-  check("Welcome message explains there's a separate switch for the invoice's language",
-    chatHtml.toLowerCase().includes("invoice is generated in") || chatHtml.toLowerCase().includes("idioma se genera la factura"));
+  check("Stage 2 message explains the automatic translation feature and invoice language choice",
+    chatHtml.toLowerCase().includes("translation"));
 
-  // Tapping the invoice-language toggle directly should remove the highlight
+  // Tapping the invoice-language toggle directly should remove the highlight and advance to stage 3
   win.eval(`setInvoiceLang('es')`);
   check("Tapping the invoice-language toggle directly removes the highlight",
     !win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
+  check("Tapping the invoice-language toggle advances onboarding to the final 'done' stage",
+    win.eval('onboardingStage') === "done");
 
-  // Re-triggering the welcome flow (e.g. via switching conversation language) should not
-  // crash or double-apply the highlight in a broken way — re-applying is idempotent
-  win.eval(`setLang('es')`);
-  await wait(100);
-  const toggleElAfter = win.document.getElementById("invoiceLangToggle");
-  check("Re-triggering the welcome flow re-applies the highlight cleanly (idempotent, no crash)",
-    toggleElAfter.classList.contains("attn-highlight"));
-
-  // Tapping "Continue" to proceed past onboarding should remove the highlight
+  // Tapping "Continue" to proceed past onboarding should keep the highlight off
   win.eval(`document.querySelector('#chipArea .chip').click()`);
-  check("Tapping Continue removes the highlight", !win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
+  check("Tapping Continue keeps the invoice-language highlight off", !win.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
 
-  // A returning user (info already set) should never see the highlight at all
+  // A returning user (info already set) should never see either highlight at all
   const dom2 = domWithPreseededStorage({
     contractor_info: JSON.stringify({firstName:"Carlos", lastName:"Ruiz", businessName:"", address:"", phone:"", mode:"generic"})
   });
@@ -2682,6 +2710,8 @@ async function testInvoiceLangToggleHighlightOnOnboarding() {
   await wait(300);
   check("A returning user (not first-time) does NOT see the invoice-language toggle highlighted",
     !win2.document.getElementById("invoiceLangToggle").classList.contains("attn-highlight"));
+  check("A returning user (not first-time) does NOT see the conversation-language toggle highlighted",
+    !win2.document.getElementById("btnES").closest(".lang-toggle").classList.contains("attn-highlight"));
 }
 
 (async () => {
