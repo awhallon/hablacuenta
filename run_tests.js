@@ -1570,10 +1570,13 @@ async function testSpanishTranslationOfStaticUI() {
   check("Billing Setup dropdown options translate to Spanish",
     win.document.getElementById("optBplw").textContent.includes("Andrew Whallon") && win.document.getElementById("optGeneric").textContent.includes("propios clientes"));
 
-  // Back buttons (every panel) should all say the Spanish equivalent
-  ["mgrBackBtn","incBackBtn","historyBackBtn","settingsBackBtn","addrMgrBackBtn"].forEach(id => {
+  // Back buttons (every other panel) should all say the plain Spanish equivalent
+  ["mgrBackBtn","incBackBtn","historyBackBtn","addrMgrBackBtn"].forEach(id => {
     check(`Back button #${id} translates to Spanish`, win.document.getElementById(id).textContent === "← Atrás");
   });
+  // Settings' back button has unique wording ("Back, Do Not Save") to distinguish it from Save
+  check("Settings back button translates to Spanish with its distinct 'Do Not Save' wording",
+    win.document.getElementById("settingsBackBtn").textContent === "← Atrás, No Guardar");
 
   // Switching back to English should restore everything correctly (no stuck-Spanish bug)
   win.eval(`setLang('en')`);
@@ -2942,6 +2945,53 @@ async function testHighlightTakesPrecedenceOverButtonColor() {
     myInfoBtn.classList.contains("attn-highlight"));
 }
 
+async function testSettingsSaveAndBackButtonsGroupedTogether() {
+  console.log("\n=== TEST SUITE 51: Settings Save and Back Buttons Grouped Together (Andy's requested layout fix) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`showSettings()`);
+
+  // Save must now live OUTSIDE the form card (.mgr-panel), not inside it
+  const mgrPanel = win.document.querySelector("#settingsPanel .mgr-panel");
+  const saveBtn = win.document.getElementById("btnSaveSettings");
+  const backBtn = win.document.getElementById("settingsBackBtn");
+  check("Save button is no longer inside the .mgr-panel form card", !mgrPanel.contains(saveBtn));
+  check("Back button is also outside the .mgr-panel form card (same as before)", !mgrPanel.contains(backBtn));
+
+  // Both buttons must share the same parent container, sitting together as one action row
+  check("Save and Back buttons share the same parent container (grouped together)",
+    saveBtn.parentElement === backBtn.parentElement);
+  check("Their shared container has the action-row class",
+    saveBtn.parentElement.classList.contains("action-row"));
+
+  // Back button's wording must be updated to clarify it discards changes
+  check("Back button text now reads 'Back, Do Not Save' instead of plain 'Back'",
+    backBtn.textContent.includes("Do Not Save"));
+
+  // Back button must use the red/danger styling, Save must keep its green styling
+  check("Back button uses the red 'action-btn-danger' style", backBtn.classList.contains("action-btn-danger"));
+  check("Save button uses the green 'action-btn-save' style", saveBtn.classList.contains("action-btn-save"));
+
+  const styleBlock = win.document.querySelector("style").textContent;
+  const dangerRuleMatch = styleBlock.match(/\.action-btn-danger\{([^}]*)\}/);
+  check("The red button's CSS rule actually uses a red color (border and/or text)",
+    !!dangerRuleMatch && (dangerRuleMatch[1].includes("#DC2626") || dangerRuleMatch[1].includes("#B91C1C")));
+
+  // Both buttons must still function correctly after the relocation
+  win.document.getElementById("setFirstName").value = "TestName";
+  win.eval(`saveSettingsForm()`);
+  check("Save button still correctly saves the entered info after relocation",
+    win.eval('contractorInfo.firstName') === "TestName");
+
+  win.eval(`showSettings()`);
+  win.document.getElementById("setFirstName").value = "ShouldNotSave";
+  win.eval(`hideSettings()`);
+  check("Back button still correctly discards unsaved changes after relocation (does not call save)",
+    win.eval('contractorInfo.firstName') === "TestName");
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2995,6 +3045,7 @@ async function testHighlightTakesPrecedenceOverButtonColor() {
     await testNavButtonsTwoRowLayout();
     await testNavButtonsHaveDistinctColors();
     await testHighlightTakesPrecedenceOverButtonColor();
+    await testSettingsSaveAndBackButtonsGroupedTogether();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
