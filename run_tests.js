@@ -2714,6 +2714,66 @@ async function testInvoiceLangToggleHighlightOnOnboarding() {
     !win2.document.getElementById("btnES").closest(".lang-toggle").classList.contains("attn-highlight"));
 }
 
+async function testBackButtonFromSettingsDuringOnboarding() {
+  console.log("\n=== TEST SUITE 45: Back Button From Settings During Onboarding (regression for Adrian's reported dead-end bug) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // Walk through onboarding to reach stage 3 (Continue button)
+  win.eval(`setLang('en')`);
+  win.eval(`setInvoiceLang('en')`);
+  await wait(100);
+  check("Onboarding reaches the final 'done' stage with a Continue chip", win.eval('onboardingStage') === "done");
+  check("The Continue chip is present before tapping it",
+    win.document.getElementById("chipArea").innerHTML.includes("Continue"));
+
+  // Tap Continue — this opens Settings and (per the original bug) used to permanently clear the chip
+  win.eval(`document.querySelector('#chipArea .chip').click()`);
+  check("Tapping Continue opens the Settings panel", win.document.getElementById("settingsPanel").style.display === "block");
+  check("The chip area is empty while Settings is open (expected — no chip needed while in Settings)",
+    win.document.getElementById("chipArea").innerHTML === "");
+
+  // Tap Back WITHOUT saving — this is the exact scenario Adrian reported
+  win.eval(`hideSettings()`);
+  check("Tapping Back closes the Settings panel", win.document.getElementById("settingsPanel").style.display !== "block");
+  check("Tapping Back returns to the main panel", win.document.getElementById("mainPanel").style.display === "block");
+  check("CRITICAL: the Continue chip is restored after backing out of Settings without saving — there must be a way back in",
+    win.document.getElementById("chipArea").innerHTML.includes("Continue"));
+  check("Still a first-time user after backing out without saving (no info was actually entered)",
+    win.eval('isFirstTimeUser()') === true);
+
+  // Tapping the restored Continue chip should correctly re-open Settings
+  win.eval(`document.querySelector('#chipArea .chip').click()`);
+  check("Tapping the restored Continue chip successfully re-opens Settings",
+    win.document.getElementById("settingsPanel").style.display === "block");
+
+  // This time, actually fill in info and save — confirm the whole flow still completes correctly
+  win.document.getElementById("setFirstName").value = "Jose";
+  win.document.getElementById("setLastName").value = "Garcia";
+  win.eval(`saveSettingsForm()`);
+  await wait(100);
+  check("After actually saving info (post back-and-forth), Settings closes automatically",
+    win.document.getElementById("settingsPanel").style.display !== "block");
+  check("isFirstTimeUser() correctly becomes false after saving real info",
+    win.eval('isFirstTimeUser()') === false);
+  const postSaveChatHtml = win.document.getElementById("chatBox").innerHTML;
+  check("The normal invoice-type greeting appears with the correct name after this full back-and-forth flow",
+    postSaveChatHtml.includes("What type of invoice do you need") && postSaveChatHtml.includes("Jose"));
+
+  // Confirm backing out of Settings AFTER onboarding is complete (normal returning-user case)
+  // does NOT incorrectly re-show a Continue chip, since that's only relevant during onboarding
+  const dom2 = domWithPreseededStorage({
+    contractor_info: JSON.stringify({firstName:"Maria", lastName:"Lopez", businessName:"", address:"", phone:"", mode:"generic"})
+  });
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval(`showSettings()`);
+  win2.eval(`hideSettings()`);
+  check("For a RETURNING user (not onboarding), backing out of Settings does NOT incorrectly show a Continue chip",
+    !win2.document.getElementById("chipArea").innerHTML.includes("Continue"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -2761,6 +2821,7 @@ async function testInvoiceLangToggleHighlightOnOnboarding() {
     await testBillingSetupDropdownReorderedAndReworded();
     await testToggleLabelFontSizeIncreased();
     await testInvoiceLangToggleHighlightOnOnboarding();
+    await testBackButtonFromSettingsDuringOnboarding();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
