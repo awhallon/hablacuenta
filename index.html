@@ -148,7 +148,7 @@ input[type=file]{display:none;}
   <div class="header">
     <div class="header-top">
       <div>
-        <div class="header-title" id="headerTitleText">📄 Alfonso Sanchez Property Services</div>
+        <div class="header-title" id="headerTitleText">Alfonso Sanchez Property Services</div>
         <div class="header-sub" id="headerSubText">Invoice Assistant</div>
       </div>
       <div class="header-right">
@@ -1078,7 +1078,7 @@ function saveSettingsForm(){
   contractorInfo={firstName,lastName,businessName,address,phone,mode};
   saveContractorInfo();
   const displayName=contractorDisplayName(contractorInfo);
-  document.getElementById("headerTitleText").textContent="📄 "+displayName;
+  document.getElementById("headerTitleText").textContent=displayName;
   document.title=displayName;
   if(wasFirstTime){
     hideSettings();
@@ -2751,7 +2751,7 @@ function startAddressManagerAdd(){
 
 function applyContractorInfoToHeader(){
   const displayName=contractorDisplayName(contractorInfo);
-  document.getElementById("headerTitleText").textContent="📄 "+displayName;
+  document.getElementById("headerTitleText").textContent=displayName;
   document.title=displayName;
 }
 window.onload=()=>{applyContractorInfoToHeader();resetChat();};
