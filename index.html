@@ -160,7 +160,7 @@ input[type=file]{display:none;}
     <div class="nav-links">
       <div class="nav-row">
         <button class="nav-btn" id="navSettings" onclick="showSettings()">My Info</button>
-        <button class="nav-btn" id="navClients" onclick="showManager()">Clients</button>
+        <button class="nav-btn" id="navClients" onclick="showManager()">My Clients</button>
         <button class="nav-btn" id="navAddresses" onclick="showAddressManager()">Job Addresses</button>
       </div>
       <div class="nav-row">
@@ -896,7 +896,7 @@ function applyStaticTranslations(){
   set("invoiceLangLabel","Factura en","Invoice in");
   set("navUncompleted","Pendientes","Uncompleted");
   set("navHistory","Historial","History");
-  set("navClients","Clientes","Clients");
+  set("navClients","Mis Clientes","My Clients");
   set("navAddresses","Direcciones de Trabajo","Job Addresses");
   set("navSettings","Mis Datos","My Info");
   set("mgrTitle","Clientes Guardados","Saved Clients");
@@ -932,14 +932,6 @@ function setLang(l){
   document.getElementById("btnES").classList.toggle("active",l==="es");
   document.getElementById("btnEN").classList.toggle("active",l==="en");
   document.getElementById("userInput").placeholder=t("Escribe aquí...","Type here...");
-  // If the user hasn't explicitly chosen a different invoice language, keep it in sync with
-  // the conversation language by default — most people want their invoices in the language
-  // they're speaking, until they deliberately split the two.
-  if(!invoiceLangExplicitlySet){
-    invoiceLang=l;
-    document.getElementById("btnInvES").classList.toggle("active",l==="es");
-    document.getElementById("btnInvEN").classList.toggle("active",l==="en");
-  }
   applyStaticTranslations();
   // During first-time onboarding, tapping the conversation toggle is itself the first
   // deliberate choice — advance to the invoice-language step rather than re-showing message 1.
@@ -949,10 +941,8 @@ function setLang(l){
   resetChat();
 }
 
-let invoiceLangExplicitlySet=false;
 function setInvoiceLang(l){
   invoiceLang=l;
-  invoiceLangExplicitlySet=true;
   document.getElementById("btnInvES").classList.toggle("active",l==="es");
   document.getElementById("btnInvEN").classList.toggle("active",l==="en");
   unhighlightInvoiceLangToggle();
