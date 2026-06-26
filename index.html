@@ -39,8 +39,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 }
 .lang-btn{padding:5px 13px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:#888;}
 .lang-btn.active{background:#111;color:#fff;}
-.lang-toggle-group{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}
-.lang-toggle-labeled{display:flex;align-items:center;gap:6px;}
+.lang-toggle-group{display:flex;flex-direction:column;gap:4px;align-items:stretch;}
+.lang-toggle-labeled{display:flex;align-items:center;justify-content:flex-end;gap:6px;}
 .lang-toggle-label{font-size:12px;color:#999;white-space:nowrap;}
 .chip.type-labor{border-color:#16A34A;color:#166534;background:#DCFCE7;}
 .chip.type-materials{border-color:#CA8A04;color:#854F0B;background:#FEF9C3;}
@@ -930,6 +930,11 @@ function setLang(l){
     document.getElementById("btnInvEN").classList.toggle("active",l==="en");
   }
   applyStaticTranslations();
+  // During first-time onboarding, tapping the conversation toggle is itself the first
+  // deliberate choice — advance to the invoice-language step rather than re-showing message 1.
+  if(isFirstTimeUser() && onboardingStage==="lang"){
+    onboardingStage="invoiceLang";
+  }
   resetChat();
 }
 
@@ -940,6 +945,13 @@ function setInvoiceLang(l){
   document.getElementById("btnInvES").classList.toggle("active",l==="es");
   document.getElementById("btnInvEN").classList.toggle("active",l==="en");
   unhighlightInvoiceLangToggle();
+  // During first-time onboarding, tapping the invoice toggle completes the welcome sequence —
+  // advance to the final explanation + Continue button, replacing the current welcome message.
+  if(isFirstTimeUser() && onboardingStage==="invoiceLang"){
+    onboardingStage="done";
+    resetChat();
+    return;
+  }
   // Does NOT reset the conversation — this only affects how the final PDF gets translated
   // when generated. Update the invoice preview (if one is showing) so the language-mismatch
   // notice reflects the new setting immediately.
@@ -1173,20 +1185,49 @@ function resetChat(){
   showInvoiceTypeChips();
 }
 
+let onboardingStage="lang"; // "lang" -> "invoiceLang" -> "done" — tracks progress through first-time welcome
+
 function showWelcomeMessage(){
-  addAIMsg(
-    "Welcome to Hablacuenta! 👋 The first thing to decide is which language you'd like the app to talk to you in. You can change this anytime using the switch at the top of the screen.\n\n¡Bienvenido a Hablacuenta! 👋 Lo primero es decidir en qué idioma quieres que la aplicación te hable. Puedes cambiarlo en cualquier momento con el interruptor en la parte superior de la pantalla."
-  );
+  if(onboardingStage==="lang"){
+    addAIMsg(
+      "Welcome to Hablacuenta! 👋 The first thing to decide is which language you'd like the app to talk to you in. Tap ES or EN above to choose.\n\n¡Bienvenido a Hablacuenta! 👋 Lo primero es decidir en qué idioma quieres que la aplicación te hable. Toca ES o EN arriba para elegir."
+    );
+    highlightConvLangToggle();
+    document.getElementById("chipArea").innerHTML="";
+    return;
+  }
+  if(onboardingStage==="invoiceLang"){
+    unhighlightConvLangToggle();
+    addAIMsg(t(
+      "Una de las cosas que hace que crear facturas profesionales sea tan fácil es nuestra función de traducción automática.\n\nAhora elige el idioma que quieres para la mayoría de tus facturas — toca ES o EN en \"Factura en\" arriba. Puedes cambiar esto en cualquier momento, ya que es posible que tengas clientes que hablan diferentes idiomas.",
+      "One of the things that makes creating professional invoices so easy is our automatic translation feature.\n\nNow choose the language you want for most of your invoices — tap ES or EN on \"Invoice in\" above. You can change this anytime, since you may have clients who speak different languages."
+    ));
+    highlightInvoiceLangToggle();
+    document.getElementById("chipArea").innerHTML="";
+    return;
+  }
+  // onboardingStage === "done"
+  unhighlightInvoiceLangToggle();
   addAIMsg(t(
-    "Una vez que hayas elegido, toca \"Continuar\" para configurar la información de tu negocio.\n\nEste app te ayuda a crear facturas profesionales con solo hablar — sin formularios complicados. Solo responde las preguntas y la factura se genera automáticamente.\n\nNota: hay un interruptor separado arriba para elegir en qué idioma se genera la factura final — esto puede ser diferente del idioma en que hablas con la app.",
-    "Once you've chosen, tap \"Continue\" to set up your business information.\n\nThis app helps you create professional invoices just by talking — no complicated forms. Just answer the questions and the invoice gets built automatically.\n\nNote: there's a separate switch above for choosing what language the final invoice is generated in — this can be different from the language you talk to the app in."
+    "Una vez que hayas elegido, toca \"Continuar\" para configurar la información de tu negocio.\n\nEste app te ayuda a crear facturas profesionales con solo hablar — sin formularios complicados. Solo responde las preguntas y la factura se genera automáticamente.",
+    "Once you've chosen, tap \"Continue\" to set up your business information.\n\nThis app helps you create professional invoices just by talking — no complicated forms. Just answer the questions and the invoice gets built automatically."
   ));
-  highlightInvoiceLangToggle();
   const area=document.getElementById("chipArea");area.innerHTML="";
   const chip=document.createElement("div");chip.className="chip new";
   chip.textContent=t("Continuar →","Continue →");
-  chip.onclick=()=>{area.innerHTML="";unhighlightInvoiceLangToggle();showSettings();};
+  chip.onclick=()=>{area.innerHTML="";showSettings();};
   area.appendChild(chip);
+}
+
+function highlightConvLangToggle(){
+  const el=document.getElementById("btnES");
+  const toggleEl=el?el.closest(".lang-toggle"):null;
+  if(toggleEl) toggleEl.classList.add("attn-highlight");
+}
+function unhighlightConvLangToggle(){
+  const el=document.getElementById("btnES");
+  const toggleEl=el?el.closest(".lang-toggle"):null;
+  if(toggleEl) toggleEl.classList.remove("attn-highlight");
 }
 
 function highlightInvoiceLangToggle(){
