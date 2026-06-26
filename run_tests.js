@@ -1550,7 +1550,7 @@ async function testSpanishTranslationOfStaticUI() {
 
   // Panel titles
   win.eval(`showManager()`);
-  check("'Saved Clients' panel title translates to Spanish", win.document.getElementById("mgrTitle").textContent === "Clientes Guardados");
+  check("'My Clients' panel title translates to Spanish", win.document.getElementById("mgrTitle").textContent === "Mis Clientes");
   win.eval(`showIncomplete()`);
   check("'Uncompleted Invoices' panel title translates to Spanish", win.document.getElementById("incTitle").textContent === "Facturas Pendientes");
   win.eval(`showHistory()`);
@@ -1558,7 +1558,7 @@ async function testSpanishTranslationOfStaticUI() {
   win.eval(`showSettings()`);
   check("'Your Business Info' panel title translates to Spanish", win.document.getElementById("settingsTitle").textContent === "Información de tu Negocio");
   win.eval(`showAddressManager()`);
-  check("'Manage Job Addresses' panel title translates to Spanish", win.document.getElementById("addrMgrTitle").textContent === "Administrar Direcciones de Trabajo");
+  check("'Job Addresses' panel title translates to Spanish", win.document.getElementById("addrMgrTitle").textContent === "Direcciones de Trabajo");
 
   // Settings field labels
   check("Settings 'First Name' label translates to Spanish", win.document.getElementById("lblFirstName").textContent === "Nombre");
@@ -2992,6 +2992,136 @@ async function testSettingsSaveAndBackButtonsGroupedTogether() {
     win.eval('contractorInfo.firstName') === "TestName");
 }
 
+async function testActiveNavButtonHighlighting() {
+  console.log("\n=== TEST SUITE 52: Active Nav Button Highlighting (signposting: 'where am I?') ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const navIds = ["navSettings","navClients","navAddresses","navUncompleted","navHistory"];
+  const showFns = {navSettings:"showSettings()", navClients:"showManager()", navAddresses:"showAddressManager()", navUncompleted:"showIncomplete()", navHistory:"showHistory()"};
+  const hideFns = {navSettings:"hideSettings()", navClients:"hideManager()", navAddresses:"hideAddressManager()", navUncompleted:"hideIncomplete()", navHistory:"hideHistory()"};
+
+  for (const navId of navIds) {
+    win.eval(showFns[navId]);
+    const activeIds = navIds.filter(id => win.document.getElementById(id).classList.contains("active-panel"));
+    check(`Opening the panel for #${navId} marks ONLY that button as active-panel`,
+      activeIds.length === 1 && activeIds[0] === navId, `got active: ${JSON.stringify(activeIds)}`);
+    win.eval(hideFns[navId]);
+    const activeAfterHide = navIds.filter(id => win.document.getElementById(id).classList.contains("active-panel"));
+    check(`Closing the panel for #${navId} clears the active-panel state`,
+      activeAfterHide.length === 0, `got active: ${JSON.stringify(activeAfterHide)}`);
+  }
+
+  // Switching directly between panels (without going through the main screen) should
+  // correctly move the active state, not leave two buttons marked active
+  win.eval(`showManager()`);
+  win.eval(`showHistory()`);
+  const activeAfterSwitch = navIds.filter(id => win.document.getElementById(id).classList.contains("active-panel"));
+  check("Switching directly from one panel to another moves the active state cleanly (no duplicates)",
+    activeAfterSwitch.length === 1 && activeAfterSwitch[0] === "navHistory");
+
+  // Starting a fresh invoice (resetChat) should clear any lingering active state
+  win.eval(`showManager()`);
+  win.eval(`resetChat()`);
+  const activeAfterReset = navIds.filter(id => win.document.getElementById(id).classList.contains("active-panel"));
+  check("resetChat() clears any active nav button state", activeAfterReset.length === 0);
+}
+
+async function testPanelHeadingsMatchNavButtons() {
+  console.log("\n=== TEST SUITE 53: Panel Headings Match Their Nav Button Wording (signposting: 'where am I?') ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  check("My Clients panel heading matches its nav button text exactly",
+    win.document.getElementById("mgrTitle").textContent === win.document.getElementById("navClients").textContent);
+  check("Job Addresses panel heading matches its nav button text exactly",
+    win.document.getElementById("addrMgrTitle").textContent === win.document.getElementById("navAddresses").textContent);
+
+  // The other three intentionally extend rather than contradict their button's wording
+  check("Uncompleted Invoices heading starts with the nav button's word",
+    win.document.getElementById("incTitle").textContent.startsWith(win.document.getElementById("navUncompleted").textContent));
+  check("Invoice History heading contains the nav button's word",
+    win.document.getElementById("historyTitle").textContent.includes(win.document.getElementById("navHistory").textContent));
+}
+
+async function testPanelPurposeDescriptions() {
+  console.log("\n=== TEST SUITE 54: Panel Purpose Descriptions (signposting: 'what can I do here?') ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const descriptionIds = ["mgrDesc","incDesc","historyDesc","addrMgrDesc","settingsDesc"];
+  descriptionIds.forEach(id => {
+    const el = win.document.getElementById(id);
+    check(`Description element #${id} exists and has non-empty text explaining the panel's purpose`,
+      !!el && el.textContent.trim().length > 20);
+  });
+
+  // Spanish translations must also be present and non-empty
+  win.eval(`setLang('es')`);
+  descriptionIds.forEach(id => {
+    const el = win.document.getElementById(id);
+    check(`Description element #${id} has a real Spanish translation (not empty, not identical to a generic placeholder)`,
+      !!el && el.textContent.trim().length > 20);
+  });
+}
+
+async function testImprovedEmptyStatesWithNextAction() {
+  console.log("\n=== TEST SUITE 55: Empty States Include a Next Action (signposting: 'how do I get there?') ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`invoiceHistory = []; renderHistoryList();`);
+  const emptyHistory = win.document.getElementById("historyList").innerHTML;
+  check("Empty History state explains what causes invoices to appear here, not just 'no invoices'",
+    emptyHistory.toLowerCase().includes("share") || emptyHistory.toLowerCase().includes("download") || emptyHistory.toLowerCase().includes("compartas") || emptyHistory.toLowerCase().includes("descargues"));
+
+  win.eval(`savedClients = []; renderClientList();`);
+  const emptyClients = win.document.getElementById("clientList").innerHTML;
+  check("Empty My Clients state explains clients get saved automatically, not just 'no clients'",
+    emptyClients.toLowerCase().includes("automatically") || emptyClients.toLowerCase().includes("automáticamente"));
+
+  win.eval(`incompleteInvoices = []; renderIncompleteList();`);
+  const emptyIncomplete = win.document.getElementById("incompleteList").innerHTML;
+  check("Empty Uncompleted state explains when invoices will show up here, not just 'none'",
+    emptyIncomplete.toLowerCase().includes("save") || emptyIncomplete.toLowerCase().includes("guard"));
+
+  // Job Addresses empty state should reference the CORRECT current tab name (My Clients), not the old "Clients" name
+  win.eval(`contractorInfo.mode = "generic"; savedClients = []; showAddressManager();`);
+  const emptyAddresses = win.document.getElementById("addressManagerList").innerHTML;
+  check("Job Addresses empty state references the current 'My Clients' tab name, not the stale old 'Clients' name",
+    emptyAddresses.includes("My Clients") && !emptyAddresses.match(/[^y] Clients\b/));
+}
+
+async function testFieldEditorBackButtonWarnsAboutDiscarding() {
+  console.log("\n=== TEST SUITE 56: Field Editor Back Button Warns About Discarding Edits (signposting: consequence of leaving) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`
+    contractorInfo.mode = "bplw";
+    invoiceType = "labor";
+    invoiceData = {done:true, ordered_by:"Andrew Whallon", job_address:"123 Main St", work_items:[{desc:"a",amount:1}], materials_items:[], date:"June 1, 2026"};
+    showCorrectionMenu("labor");
+    showFieldEditor("date");
+  `);
+  const editorHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("The field editor's Back button warns that unsaved edits will be discarded",
+    editorHtml.includes("Do Not Save"));
+  check("The field editor's Back button uses the red danger styling, consistent with Settings' Back button",
+    editorHtml.includes("action-btn-danger"));
+
+  // The field-selector menu's plain Cancel button (nothing to lose yet) should be unaffected
+  win.eval(`showCorrectionMenu("labor")`);
+  const menuHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("The field-selector menu's Cancel button stays plain (no red styling) since there's nothing to discard yet",
+    !menuHtml.includes("action-btn-danger"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -3046,6 +3176,11 @@ async function testSettingsSaveAndBackButtonsGroupedTogether() {
     await testNavButtonsHaveDistinctColors();
     await testHighlightTakesPrecedenceOverButtonColor();
     await testSettingsSaveAndBackButtonsGroupedTogether();
+    await testActiveNavButtonHighlighting();
+    await testPanelHeadingsMatchNavButtons();
+    await testPanelPurposeDescriptions();
+    await testImprovedEmptyStatesWithNextAction();
+    await testFieldEditorBackButtonWarnsAboutDiscarding();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
