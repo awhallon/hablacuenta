@@ -26,14 +26,15 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F5F5F5;min-height:100vh;padding:1rem;}
 .app{max-width:420px;margin:0 auto;}
-.header{background:#fff;border-radius:14px;border:1px solid #E5E7EB;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+.header{background:#fff;border-radius:14px;border:1px solid #E5E7EB;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;flex-direction:column;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+.header-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
 .header-title{font-size:15px;font-weight:600;color:#111;}
 .header-sub{font-size:12px;color:#888;margin-top:2px;}
 .header-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
 .lang-toggle{display:flex;border:1px solid #E5E7EB;border-radius:20px;overflow:hidden;}
 .attn-highlight{animation:attnPulse 1.6s ease-in-out infinite;}
 .lang-toggle.attn-highlight{border-radius:20px;}
-.nav-link.attn-highlight{border-radius:6px;padding:2px 4px;margin:-2px -4px;font-weight:700;color:#92740a;}
+.nav-btn.attn-highlight{border-color:#FACC15;background:#FEF9E7;font-weight:700;}
 @keyframes attnPulse{
   0%{box-shadow:0 0 0 0 rgba(250,204,21,0.7);}
   70%{box-shadow:0 0 0 8px rgba(250,204,21,0);}
@@ -47,9 +48,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .chip.type-labor{border-color:#16A34A;color:#166534;background:#DCFCE7;}
 .chip.type-materials{border-color:#CA8A04;color:#854F0B;background:#FEF9C3;}
 .chip.type-combined{border-color:#7C3AED;color:#5B21B6;background:#F5EEFF;}
-.nav-links{display:flex;gap:12px;}
-.nav-link{font-size:11px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;}
-.nav-link.orange{color:#D97706;}
+.nav-links{display:flex;flex-direction:column;gap:8px;}
+.nav-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.nav-btn{font-family:inherit;font-size:12px;font-weight:500;color:#444;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:7px 14px;cursor:pointer;white-space:nowrap;}
+.nav-btn:active{background:#F3F4F6;}
+.nav-btn.orange{color:#D97706;border-color:#FBBF6B;background:#FFF8EE;}
 .chat-box{background:#fff;border-radius:14px;border:1px solid #E5E7EB;padding:1rem;min-height:300px;max-height:420px;overflow-y:auto;margin-bottom:1rem;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
 .msg{max-width:88%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.5;}
 .msg.ai{background:#F3F4F6;color:#111;align-self:flex-start;border-bottom-left-radius:4px;}
@@ -130,33 +133,39 @@ input[type=file]{display:none;}
 <body>
 <div class="app">
   <div class="header">
-    <div>
-      <div class="header-title" id="headerTitleText">📄 Alfonso Sanchez Property Services</div>
-      <div class="header-sub" id="headerSubText">Invoice Assistant</div>
-    </div>
-    <div class="header-right">
-      <div class="lang-toggle-group">
-        <div class="lang-toggle-labeled">
-          <span class="lang-toggle-label" id="convLangLabel">Talk to me in</span>
-          <div class="lang-toggle">
-            <button class="lang-btn" id="btnES" onclick="setLang('es')">ES</button>
-            <button class="lang-btn active" id="btnEN" onclick="setLang('en')">EN</button>
+    <div class="header-top">
+      <div>
+        <div class="header-title" id="headerTitleText">📄 Alfonso Sanchez Property Services</div>
+        <div class="header-sub" id="headerSubText">Invoice Assistant</div>
+      </div>
+      <div class="header-right">
+        <div class="lang-toggle-group">
+          <div class="lang-toggle-labeled">
+            <span class="lang-toggle-label" id="convLangLabel">Talk to me in</span>
+            <div class="lang-toggle">
+              <button class="lang-btn" id="btnES" onclick="setLang('es')">ES</button>
+              <button class="lang-btn active" id="btnEN" onclick="setLang('en')">EN</button>
+            </div>
           </div>
-        </div>
-        <div class="lang-toggle-labeled">
-          <span class="lang-toggle-label" id="invoiceLangLabel">Invoice in</span>
-          <div class="lang-toggle" id="invoiceLangToggle">
-            <button class="lang-btn" id="btnInvES" onclick="setInvoiceLang('es')">ES</button>
-            <button class="lang-btn active" id="btnInvEN" onclick="setInvoiceLang('en')">EN</button>
+          <div class="lang-toggle-labeled">
+            <span class="lang-toggle-label" id="invoiceLangLabel">Invoice in</span>
+            <div class="lang-toggle" id="invoiceLangToggle">
+              <button class="lang-btn" id="btnInvES" onclick="setInvoiceLang('es')">ES</button>
+              <button class="lang-btn active" id="btnInvEN" onclick="setInvoiceLang('en')">EN</button>
+            </div>
           </div>
         </div>
       </div>
-      <div class="nav-links">
-        <span class="nav-link orange" id="navUncompleted" onclick="showIncomplete()">Uncompleted</span>
-        <span class="nav-link" id="navHistory" onclick="showHistory()">History</span>
-        <span class="nav-link" id="navClients" onclick="showManager()">Clients</span>
-        <span class="nav-link" id="navAddresses" onclick="showAddressManager()">Addresses</span>
-        <span class="nav-link" id="navSettings" onclick="showSettings()">My Info</span>
+    </div>
+    <div class="nav-links">
+      <div class="nav-row">
+        <button class="nav-btn" id="navSettings" onclick="showSettings()">My Info</button>
+        <button class="nav-btn" id="navClients" onclick="showManager()">Clients</button>
+        <button class="nav-btn" id="navAddresses" onclick="showAddressManager()">Job Addresses</button>
+      </div>
+      <div class="nav-row">
+        <button class="nav-btn orange" id="navUncompleted" onclick="showIncomplete()">Uncompleted</button>
+        <button class="nav-btn" id="navHistory" onclick="showHistory()">History</button>
       </div>
     </div>
   </div>
@@ -224,7 +233,7 @@ input[type=file]{display:none;}
 
   <div id="addressManagerPanel" style="display:none;">
     <div class="mgr-panel">
-      <h3 id="addrMgrTitle">Manage Addresses</h3>
+      <h3 id="addrMgrTitle">Manage Job Addresses</h3>
       <div style="margin-bottom:10px;">
         <select id="addrClientSelect" onchange="renderAddressManager()" style="width:100%;padding:8px;border-radius:8px;border:1px solid #E5E7EB;font-size:13px;">
         </select>
@@ -888,7 +897,7 @@ function applyStaticTranslations(){
   set("navUncompleted","Pendientes","Uncompleted");
   set("navHistory","Historial","History");
   set("navClients","Clientes","Clients");
-  set("navAddresses","Direcciones","Addresses");
+  set("navAddresses","Direcciones de Trabajo","Job Addresses");
   set("navSettings","Mis Datos","My Info");
   set("mgrTitle","Clientes Guardados","Saved Clients");
   set("mgrBackBtn","← Atrás","← Back");
@@ -913,7 +922,7 @@ function applyStaticTranslations(){
   set("optBplw","BPLW Management (Andrew Whallon y Richard Baisz)","BPLW Management (Andrew Whallon & Richard Baisz)");
   set("btnSaveSettings","Guardar","Save");
   set("settingsBackBtn","← Atrás","← Back");
-  set("addrMgrTitle","Administrar Direcciones","Manage Addresses");
+  set("addrMgrTitle","Administrar Direcciones de Trabajo","Manage Job Addresses");
   set("btnAddNewAddress","+ Agregar nueva dirección","+ Add new address");
   set("addrMgrBackBtn","← Atrás","← Back");
 }
