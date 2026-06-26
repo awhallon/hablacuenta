@@ -3149,6 +3149,34 @@ async function testPanelHeadingsMatchButtonColors() {
   check("All five heading colors are distinct from each other", new Set(colors).size === 5);
 }
 
+async function testRedundantDocumentEmojiRemovedFromHeader() {
+  console.log("\n=== TEST SUITE 58: Redundant Document Emoji Removed From Header (Andy's reported redundancy with 'Invoice Assistant') ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  const headerTitle = win.document.getElementById("headerTitleText");
+  check("Header title no longer starts with the document emoji",
+    !headerTitle.textContent.trim().startsWith("📄"));
+  check("Header title still correctly shows the contractor's display name",
+    headerTitle.textContent.length > 0);
+
+  // Confirm saving Settings (which re-sets this text) also doesn't reintroduce the emoji
+  win.eval(`
+    contractorInfo = {firstName:"Test", lastName:"User", businessName:"", address:"", phone:"", mode:"generic"};
+    showSettings();
+    saveSettingsForm();
+  `);
+  const headerTitleAfterSave = win.document.getElementById("headerTitleText");
+  check("Header title still has no emoji after saving Settings (which re-renders this text)",
+    !headerTitleAfterSave.textContent.trim().startsWith("📄"));
+
+  // The emoji should still appear elsewhere in legitimate, unrelated PDF-confirmation contexts
+  const generatePDFSource = win.eval('generatePDF.toString()');
+  check("The document emoji is still used elsewhere for its legitimate purpose (PDF generation confirmation), just not in the header",
+    generatePDFSource.includes("📄"));
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -3209,6 +3237,7 @@ async function testPanelHeadingsMatchButtonColors() {
     await testImprovedEmptyStatesWithNextAction();
     await testFieldEditorBackButtonWarnsAboutDiscarding();
     await testPanelHeadingsMatchButtonColors();
+    await testRedundantDocumentEmojiRemovedFromHeader();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
