@@ -31,11 +31,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .header-sub{font-size:12px;color:#888;margin-top:2px;}
 .header-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
 .lang-toggle{display:flex;border:1px solid #E5E7EB;border-radius:20px;overflow:hidden;}
-.lang-toggle.attn-highlight{animation:attnPulse 1.6s ease-in-out infinite;border-radius:20px;}
+.attn-highlight{animation:attnPulse 1.6s ease-in-out infinite;}
+.lang-toggle.attn-highlight{border-radius:20px;}
+.nav-link.attn-highlight{border-radius:6px;padding:2px 4px;margin:-2px -4px;font-weight:700;color:#92740a;}
 @keyframes attnPulse{
-  0%{box-shadow:0 0 0 0 rgba(29,158,117,0.55);}
-  70%{box-shadow:0 0 0 7px rgba(29,158,117,0);}
-  100%{box-shadow:0 0 0 0 rgba(29,158,117,0);}
+  0%{box-shadow:0 0 0 0 rgba(250,204,21,0.7);}
+  70%{box-shadow:0 0 0 8px rgba(250,204,21,0);}
+  100%{box-shadow:0 0 0 0 rgba(250,204,21,0);}
 }
 .lang-btn{padding:5px 13px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:#888;}
 .lang-btn.active{background:#111;color:#fff;}
@@ -154,7 +156,7 @@ input[type=file]{display:none;}
         <span class="nav-link" id="navHistory" onclick="showHistory()">History</span>
         <span class="nav-link" id="navClients" onclick="showManager()">Clients</span>
         <span class="nav-link" id="navAddresses" onclick="showAddressManager()">Addresses</span>
-        <span class="nav-link" id="navSettings" onclick="showSettings()">Settings</span>
+        <span class="nav-link" id="navSettings" onclick="showSettings()">My Info</span>
       </div>
     </div>
   </div>
@@ -887,7 +889,7 @@ function applyStaticTranslations(){
   set("navHistory","Historial","History");
   set("navClients","Clientes","Clients");
   set("navAddresses","Direcciones","Addresses");
-  set("navSettings","Configuración","Settings");
+  set("navSettings","Mis Datos","My Info");
   set("mgrTitle","Clientes Guardados","Saved Clients");
   set("mgrBackBtn","← Atrás","← Back");
   set("incTitle","Facturas Pendientes","Uncompleted Invoices");
@@ -994,6 +996,7 @@ function hideHistory(){
 }
 function showSettings(){
   hideAllPanels();
+  unhighlightMyInfoNavLink();
   document.getElementById("settingsPanel").style.display="block";
   document.getElementById("setFirstName").value=contractorInfo.firstName||"";
   document.getElementById("setLastName").value=contractorInfo.lastName||"";
@@ -1011,17 +1014,11 @@ function showSettings(){
 function hideSettings(){
   document.getElementById("settingsPanel").style.display="none";
   document.getElementById("mainPanel").style.display="block";
-  // If the user backs out of Settings without saving during first-time onboarding, the
-  // Continue chip was already removed when they tapped it the first time — restore it so
-  // there's still a way back into Settings, rather than leaving them with no path forward.
+  // If the user backs out of Settings without saving during first-time onboarding, re-highlight
+  // the My Info nav link so there's still a clear way back in, rather than leaving them with
+  // no path forward.
   if(isFirstTimeUser() && onboardingStage==="done"){
-    const area=document.getElementById("chipArea");
-    if(!area.innerHTML){
-      const chip=document.createElement("div");chip.className="chip new";
-      chip.textContent=t("Continuar →","Continue →");
-      chip.onclick=()=>{area.innerHTML="";showSettings();};
-      area.appendChild(chip);
-    }
+    highlightMyInfoNavLink();
   }
 }
 function saveSettingsForm(){
@@ -1221,14 +1218,20 @@ function showWelcomeMessage(){
   // onboardingStage === "done"
   unhighlightInvoiceLangToggle();
   addAIMsg(t(
-    "Una vez que hayas elegido, toca \"Continuar\" para configurar la información de tu negocio.\n\nEste app te ayuda a crear facturas profesionales con solo hablar — sin formularios complicados. Solo responde las preguntas y la factura se genera automáticamente.",
-    "Once you've chosen, tap \"Continue\" to set up your business information.\n\nThis app helps you create professional invoices just by talking — no complicated forms. Just answer the questions and the invoice gets built automatically."
+    "Este app te ayuda a crear facturas profesionales con solo hablar — sin formularios complicados. Solo responde las preguntas y la factura se genera automáticamente.\n\nEl primer paso es ingresar tu información de negocio. Puedes ingresar tanto o tan poco como quieras por ahora — siempre puedes cambiarla después.\n\nToca \"Mis Datos\" arriba para comenzar.",
+    "This app helps you create professional invoices just by talking — no complicated forms. Just answer the questions and the invoice gets built automatically.\n\nThe first step is entering your business information. You can enter as much or as little as you want right now — it can always be changed later.\n\nTap \"My Info\" above to get started."
   ));
-  const area=document.getElementById("chipArea");area.innerHTML="";
-  const chip=document.createElement("div");chip.className="chip new";
-  chip.textContent=t("Continuar →","Continue →");
-  chip.onclick=()=>{area.innerHTML="";showSettings();};
-  area.appendChild(chip);
+  document.getElementById("chipArea").innerHTML="";
+  highlightMyInfoNavLink();
+}
+
+function highlightMyInfoNavLink(){
+  const el=document.getElementById("navSettings");
+  if(el) el.classList.add("attn-highlight");
+}
+function unhighlightMyInfoNavLink(){
+  const el=document.getElementById("navSettings");
+  if(el) el.classList.remove("attn-highlight");
 }
 
 function highlightConvLangToggle(){
