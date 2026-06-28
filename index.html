@@ -189,7 +189,7 @@ input[type=file]{display:none;}
       <p id="mgrDesc" style="font-size:12px;color:#888;margin-bottom:12px;">Clients you've saved while building invoices, so you don't have to re-enter their info each time.</p>
       <div id="clientList"></div>
     </div>
-    <button class="back-btn" id="mgrBackBtn" onclick="hideManager()">← Back</button>
+    <button class="back-btn" id="mgrBackBtn" onclick="hideManager()">← Back, No Data Will Be Lost</button>
   </div>
 
   <div id="incompletePanel" style="display:none;">
@@ -198,7 +198,7 @@ input[type=file]{display:none;}
       <p id="incDesc" style="font-size:12px;color:#888;margin-bottom:12px;">Invoices you started but haven't finished — tap one to pick up where you left off, or delete it.</p>
       <div id="incompleteList"></div>
     </div>
-    <button class="back-btn" id="incBackBtn" onclick="hideIncomplete()">← Back</button>
+    <button class="back-btn" id="incBackBtn" onclick="hideIncomplete()">← Back, No Data Will Be Lost</button>
   </div>
 
   <div id="historyPanel" style="display:none;">
@@ -207,7 +207,7 @@ input[type=file]{display:none;}
       <p id="historyDesc" style="font-size:12px;color:#888;margin-bottom:12px;">Every invoice you've completed and shared or downloaded. Tap one to view or generate it again.</p>
       <div id="historyList"></div>
     </div>
-    <button class="back-btn" id="historyBackBtn" onclick="hideHistory()">← Back</button>
+    <button class="back-btn" id="historyBackBtn" onclick="hideHistory()">← Back, No Data Will Be Lost</button>
   </div>
 
   <div id="settingsPanel" style="display:none;">
@@ -263,7 +263,7 @@ input[type=file]{display:none;}
       <div id="addressManagerList"></div>
       <button class="add-photo-btn" id="btnAddNewAddress" style="margin-top:8px;" onclick="startAddressManagerAdd()">+ Add new address</button>
     </div>
-    <button class="back-btn" id="addrMgrBackBtn" onclick="hideAddressManager()">← Back</button>
+    <button class="back-btn" id="addrMgrBackBtn" onclick="hideAddressManager()">← Back, No Data Will Be Lost</button>
   </div>
 
   <div id="mainPanel">
@@ -923,13 +923,13 @@ function applyStaticTranslations(){
   set("navSettings","Mis Datos","My Info");
   set("mgrTitle","Mis Clientes","My Clients");
   set("mgrDesc","Clientes que has guardado al crear facturas, para no tener que volver a ingresar su información cada vez.","Clients you've saved while building invoices, so you don't have to re-enter their info each time.");
-  set("mgrBackBtn","← Atrás","← Back");
+  set("mgrBackBtn","← Atrás, No Se Perderá Información","← Back, No Data Will Be Lost");
   set("incTitle","Facturas Pendientes","Uncompleted Invoices");
   set("incDesc","Facturas que comenzaste pero no terminaste — toca una para continuar donde la dejaste, o elimínala.","Invoices you started but haven't finished — tap one to pick up where you left off, or delete it.");
-  set("incBackBtn","← Atrás","← Back");
+  set("incBackBtn","← Atrás, No Se Perderá Información","← Back, No Data Will Be Lost");
   set("historyTitle","Historial de Facturas","Invoice History");
   set("historyDesc","Cada factura que has completado y compartido o descargado. Toca una para verla o generarla de nuevo.","Every invoice you've completed and shared or downloaded. Tap one to view or generate it again.");
-  set("historyBackBtn","← Atrás","← Back");
+  set("historyBackBtn","← Atrás, No Se Perderá Información","← Back, No Data Will Be Lost");
   set("settingsTitle","Información de tu Negocio","Your Business Info");
   set("settingsDesc","Esto aparece como \"De\" en cada factura que crees en este dispositivo.","This appears as the \"From\" on every invoice you create on this device.");
   set("lblFirstName","Nombre","First Name");
@@ -950,7 +950,7 @@ function applyStaticTranslations(){
   set("addrMgrTitle","Direcciones de Trabajo","Job Addresses");
   set("addrMgrDesc","Direcciones de trabajo guardadas para cada cliente, para que puedas elegir una en lugar de volver a escribirla en la próxima factura.","Saved job site addresses for each client, so you can pick one instead of re-typing it on the next invoice.");
   set("btnAddNewAddress","+ Agregar nueva dirección","+ Add new address");
-  set("addrMgrBackBtn","← Atrás","← Back");
+  set("addrMgrBackBtn","← Atrás, No Se Perderá Información","← Back, No Data Will Be Lost");
 }
 
 function setLang(l){
