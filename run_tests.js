@@ -1570,9 +1570,9 @@ async function testSpanishTranslationOfStaticUI() {
   check("Billing Setup dropdown options translate to Spanish",
     win.document.getElementById("optBplw").textContent.includes("Andrew Whallon") && win.document.getElementById("optGeneric").textContent.includes("propios clientes"));
 
-  // Back buttons (every other panel) should all say the plain Spanish equivalent
+  // Back buttons (every other panel) should all say the Spanish 'no data lost' equivalent
   ["mgrBackBtn","incBackBtn","historyBackBtn","addrMgrBackBtn"].forEach(id => {
-    check(`Back button #${id} translates to Spanish`, win.document.getElementById(id).textContent === "← Atrás");
+    check(`Back button #${id} translates to Spanish with the 'no data lost' wording`, win.document.getElementById(id).textContent === "← Atrás, No Se Perderá Información");
   });
   // Settings' back button has unique wording ("Back, Do Not Save") to distinguish it from Save
   check("Settings back button translates to Spanish with its distinct 'Do Not Save' wording",
@@ -3177,6 +3177,61 @@ async function testRedundantDocumentEmojiRemovedFromHeader() {
     generatePDFSource.includes("📄"));
 }
 
+async function testBackButtonConsistencyAcrossApp() {
+  console.log("\n=== TEST SUITE 59: Back Button Consistency — Red+'Do Not Save' When Data At Risk, Neutral+'No Data Lost' Otherwise (Andy's requested rule) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  // Safe panels: plain styling, explicit "No Data Will Be Lost" wording
+  const safeBackButtonIds = ["mgrBackBtn","incBackBtn","historyBackBtn","addrMgrBackBtn"];
+  safeBackButtonIds.forEach(id => {
+    const btn = win.document.getElementById(id);
+    check(`#${id} explicitly states no data will be lost`, btn.textContent.includes("No Data Will Be Lost"));
+    check(`#${id} does NOT use the red danger styling (nothing is actually at risk here)`,
+      !btn.classList.contains("action-btn-danger"));
+    check(`#${id} keeps its original neutral 'back-btn' styling`, btn.classList.contains("back-btn"));
+  });
+
+  // Risky panels: red styling, explicit "Do Not Save" wording
+  const settingsBtn = win.document.getElementById("settingsBackBtn");
+  check("Settings back button explicitly warns about not saving (real risk: unsaved business info)",
+    settingsBtn.textContent.includes("Do Not Save"));
+  check("Settings back button uses the red danger styling", settingsBtn.classList.contains("action-btn-danger"));
+
+  win.eval(`
+    contractorInfo.mode = "bplw";
+    invoiceType = "labor";
+    invoiceData = {done:true, ordered_by:"Andrew Whallon", job_address:"123 Main St", work_items:[{desc:"a",amount:1}], materials_items:[], date:"June 1, 2026"};
+    showCorrectionMenu("labor");
+    showFieldEditor("date");
+  `);
+  const fieldEditorHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("Field editor's back button explicitly warns about not saving (real risk: unsaved field edit)",
+    fieldEditorHtml.includes("Do Not Save"));
+  check("Field editor's back button uses the red danger styling",
+    fieldEditorHtml.includes("action-btn-danger"));
+
+  // The field-selector menu's plain Cancel button should remain untouched — no risk wording needed
+  win.eval(`showCorrectionMenu("labor")`);
+  const menuHtml = win.document.getElementById("invoiceArea").innerHTML;
+  check("Field-selector menu's Cancel button stays plain 'Cancel' (no risk wording, no red styling — nothing typed yet)",
+    (menuHtml.includes(">Cancel<") || menuHtml.includes(">Cancelar<")) && !menuHtml.match(/Cancel[^<]*No Data/i));
+
+  // Every safe back button must still correctly function (actually navigate back) despite the longer text
+  win.eval(`showManager()`);
+  win.eval(`document.getElementById("mgrBackBtn").click()`);
+  check("My Clients back button still correctly returns to the main panel despite the longer label",
+    win.document.getElementById("mainPanel").style.display === "block");
+
+  // Spanish translations must carry the same distinction
+  win.eval(`setLang('es')`);
+  check("Spanish: safe back buttons say 'No Se Perderá Información'",
+    win.document.getElementById("mgrBackBtn").textContent === "← Atrás, No Se Perderá Información");
+  check("Spanish: Settings' risky back button keeps its distinct 'No Guardar' wording",
+    win.document.getElementById("settingsBackBtn").textContent === "← Atrás, No Guardar");
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -3238,6 +3293,7 @@ async function testRedundantDocumentEmojiRemovedFromHeader() {
     await testFieldEditorBackButtonWarnsAboutDiscarding();
     await testPanelHeadingsMatchButtonColors();
     await testRedundantDocumentEmojiRemovedFromHeader();
+    await testBackButtonConsistencyAcrossApp();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
