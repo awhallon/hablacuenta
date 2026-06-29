@@ -185,9 +185,10 @@ input[type=file]{display:none;}
 
   <div id="managerPanel" style="display:none;">
     <div class="mgr-panel">
-      <h3 id="mgrTitle" style="color:#7C3AED;">My Clients</h3>
+      <h3 id="mgrTitle" style="color:#7C3AED;">My Client Information</h3>
       <p id="mgrDesc" style="font-size:12px;color:#888;margin-bottom:12px;">Clients you've saved while building invoices, so you don't have to re-enter their info each time.</p>
       <div id="clientList"></div>
+      <button class="add-photo-btn" id="btnAddNewClient" style="margin-top:8px;" onclick="startNewClientFromManager()">+ Add new client</button>
     </div>
     <button class="back-btn" id="mgrBackBtn" onclick="hideManager()">← Back, No Data Will Be Lost</button>
   </div>
@@ -212,7 +213,7 @@ input[type=file]{display:none;}
 
   <div id="settingsPanel" style="display:none;">
     <div class="mgr-panel">
-      <h3 id="settingsTitle" style="color:#1D4ED8;">Your Business Info</h3>
+      <h3 id="settingsTitle" style="color:#1D4ED8;">My Business Information</h3>
       <p id="settingsDesc" style="font-size:12px;color:#888;margin-bottom:12px;">This appears as the "From" on every invoice you create on this device.</p>
       <label id="lblFirstName" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">First Name</label>
       <input id="setFirstName" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:12px;">
@@ -241,8 +242,8 @@ input[type=file]{display:none;}
       <input id="setPhone" type="text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:16px;">
       <label id="lblBillingSetup" style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Billing Setup</label>
       <select id="setMode" style="width:100%;padding:10px;border-radius:8px;border:1px solid #E5E7EB;font-size:14px;margin-bottom:16px;">
-        <option id="optGeneric" value="generic">My own clients (general contractor)</option>
-        <option id="optBplw" value="bplw">BPLW Management (Andrew Whallon &amp; Richard Baisz)</option>
+        <option id="optGeneric" value="generic">My Own Clients Only</option>
+        <option id="optBplw" value="bplw">My Own Clients and BPLW Management (Andrew Whallon &amp; Richard Baisz)</option>
       </select>
       <div id="settingsSavedMsg" style="display:none;color:#16A34A;font-size:13px;margin-top:10px;text-align:center;">✓ Saved</div>
     </div>
@@ -514,6 +515,7 @@ function completeGuidedAddress(purpose, meta, fullAddress, parts){
 }
 
 let newClientState=null; // tracks guided new-client entry flow
+let addedFromManager=false; // true when this flow was launched from the My Clients panel directly, not mid-invoice
 
 function startNewClient(){
   newClientState={step:"name",data:{}};
@@ -609,7 +611,18 @@ function handleNewClientInput(text){
     addClient({name:d.name,address:d.address||"",email:d.email||"",phone:d.phone||""});
     currentOrderedBy=d.name;
     newClientState=null;
-    addAIMsg(t(`Cliente guardado: ${d.name}. Puedes editar esta información más tarde en la pestaña "Clientes".`,`Client saved: ${d.name}. You can edit this info later from the "Clients" tab.`));
+    addAIMsg(t(`Cliente guardado: ${d.name}. Puedes editar esta información más tarde en la pestaña "Mis Clientes".`,`Client saved: ${d.name}. You can edit this info later from the "My Clients" tab.`));
+    if(addedFromManager){
+      // Added directly from the My Clients panel, not mid-invoice — give a clear way back
+      // rather than leaving the user stranded in an empty chat with nothing to tap.
+      addedFromManager=false;
+      const area=document.getElementById("chipArea");area.innerHTML="";
+      const chip=document.createElement("div");chip.className="chip new";
+      chip.textContent=t("← Volver a Mis Clientes","← Back to My Clients");
+      chip.onclick=()=>{area.innerHTML="";showManager();};
+      area.appendChild(chip);
+      return true;
+    }
     const handoffMsg=`[App note: the client "${d.name}" has already been fully saved with their address, email, and phone — do NOT ask for these again. Proceed directly to the next step of the invoice, such as asking for the job address.] The invoice is for ${d.name}.`;
     lastUserText=handoffMsg;
     addUserMsg(d.name);
@@ -921,8 +934,9 @@ function applyStaticTranslations(){
   set("navClients","Mis Clientes","My Clients");
   set("navAddresses","Direcciones de Trabajo","Job Addresses");
   set("navSettings","Mis Datos","My Info");
-  set("mgrTitle","Mis Clientes","My Clients");
+  set("mgrTitle","Información de mis Clientes","My Client Information");
   set("mgrDesc","Clientes que has guardado al crear facturas, para no tener que volver a ingresar su información cada vez.","Clients you've saved while building invoices, so you don't have to re-enter their info each time.");
+  set("btnAddNewClient","+ Agregar nuevo cliente","+ Add new client");
   set("mgrBackBtn","← Atrás, No Se Perderá Información","← Back, No Data Will Be Lost");
   set("incTitle","Facturas Pendientes","Uncompleted Invoices");
   set("incDesc","Facturas que comenzaste pero no terminaste — toca una para continuar donde la dejaste, o elimínala.","Invoices you started but haven't finished — tap one to pick up where you left off, or delete it.");
@@ -930,7 +944,7 @@ function applyStaticTranslations(){
   set("historyTitle","Historial de Facturas","Invoice History");
   set("historyDesc","Cada factura que has completado y compartido o descargado. Toca una para verla o generarla de nuevo.","Every invoice you've completed and shared or downloaded. Tap one to view or generate it again.");
   set("historyBackBtn","← Atrás, No Se Perderá Información","← Back, No Data Will Be Lost");
-  set("settingsTitle","Información de tu Negocio","Your Business Info");
+  set("settingsTitle","Información de mi Negocio","My Business Information");
   set("settingsDesc","Esto aparece como \"De\" en cada factura que crees en este dispositivo.","This appears as the \"From\" on every invoice you create on this device.");
   set("lblFirstName","Nombre","First Name");
   set("lblLastName","Apellido","Last Name");
@@ -943,8 +957,8 @@ function applyStaticTranslations(){
   set("lblZip","Código Postal","Zip Code");
   set("lblPhone","Teléfono","Phone");
   set("lblBillingSetup","Configuración de Facturación","Billing Setup");
-  set("optGeneric","Mis propios clientes (contratista general)","My own clients (general contractor)");
-  set("optBplw","BPLW Management (Andrew Whallon y Richard Baisz)","BPLW Management (Andrew Whallon & Richard Baisz)");
+  set("optGeneric","Solo Mis Propios Clientes","My Own Clients Only");
+  set("optBplw","Mis Propios Clientes y BPLW Management (Andrew Whallon y Richard Baisz)","My Own Clients and BPLW Management (Andrew Whallon & Richard Baisz)");
   set("btnSaveSettings","Guardar","Save");
   set("settingsBackBtn","← Atrás, No Guardar","← Back, Do Not Save");
   set("addrMgrTitle","Direcciones de Trabajo","Job Addresses");
@@ -1218,7 +1232,7 @@ function continueIncomplete(i){
 }
 
 function resetChat(){
-  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;newClientState=null;guidedAddrState=null;showBackBtn(false);showMidSaveBtn(false);
+  messages=[];invoiceData=null;jobPhotos=[];receipts=[];lastUserText="";lastStreet="";currentOrderedBy="";invoiceType="both";convStage="invoice_type";newAddrState=null;newClientState=null;guidedAddrState=null;addedFromManager=false;showBackBtn(false);showMidSaveBtn(false);
   setActiveNavButton(null);
   document.getElementById("chatBox").innerHTML="";
   document.getElementById("chipArea").innerHTML="";
@@ -2740,9 +2754,16 @@ function deleteAddress(clientName, idx){
   try{localStorage.setItem(key,JSON.stringify(saved));}catch(e){}
   renderAddressManager();
 }
+function startNewClientFromManager(){
+  hideManager();
+  document.getElementById("chatBox").innerHTML="";
+  addedFromManager=true;
+  startNewClient();
+}
+
 function startAddressManagerAdd(){
   const clientName=document.getElementById("addrClientSelect").value;
-  if(!clientName){alert("Please add a client first from the \"Clients\" tab.");return;}
+  if(!clientName){alert("Please add a client first from the \"My Clients\" tab.");return;}
   currentOrderedBy=clientName;
   hideAddressManager();
   document.getElementById("chatBox").innerHTML="";
