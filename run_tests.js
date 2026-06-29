@@ -1550,13 +1550,13 @@ async function testSpanishTranslationOfStaticUI() {
 
   // Panel titles
   win.eval(`showManager()`);
-  check("'My Clients' panel title translates to Spanish", win.document.getElementById("mgrTitle").textContent === "Mis Clientes");
+  check("'My Client Information' panel title translates to Spanish", win.document.getElementById("mgrTitle").textContent === "Información de mis Clientes");
   win.eval(`showIncomplete()`);
   check("'Uncompleted Invoices' panel title translates to Spanish", win.document.getElementById("incTitle").textContent === "Facturas Pendientes");
   win.eval(`showHistory()`);
   check("'Invoice History' panel title translates to Spanish", win.document.getElementById("historyTitle").textContent === "Historial de Facturas");
   win.eval(`showSettings()`);
-  check("'Your Business Info' panel title translates to Spanish", win.document.getElementById("settingsTitle").textContent === "Información de tu Negocio");
+  check("'My Business Information' panel title translates to Spanish", win.document.getElementById("settingsTitle").textContent === "Información de mi Negocio");
   win.eval(`showAddressManager()`);
   check("'Job Addresses' panel title translates to Spanish", win.document.getElementById("addrMgrTitle").textContent === "Direcciones de Trabajo");
 
@@ -1568,7 +1568,7 @@ async function testSpanishTranslationOfStaticUI() {
   check("Settings 'Billing Setup' label translates to Spanish", win.document.getElementById("lblBillingSetup").textContent === "Configuración de Facturación");
   check("Settings 'Save' button translates to Spanish", win.document.getElementById("btnSaveSettings").textContent === "Guardar");
   check("Billing Setup dropdown options translate to Spanish",
-    win.document.getElementById("optBplw").textContent.includes("Andrew Whallon") && win.document.getElementById("optGeneric").textContent.includes("propios clientes"));
+    win.document.getElementById("optBplw").textContent.includes("Andrew Whallon") && win.document.getElementById("optGeneric").textContent.includes("Mis Propios Clientes"));
 
   // Back buttons (every other panel) should all say the Spanish 'no data lost' equivalent
   ["mgrBackBtn","incBackBtn","historyBackBtn","addrMgrBackBtn"].forEach(id => {
@@ -3029,17 +3029,21 @@ async function testActiveNavButtonHighlighting() {
 }
 
 async function testPanelHeadingsMatchNavButtons() {
-  console.log("\n=== TEST SUITE 53: Panel Headings Match Their Nav Button Wording (signposting: 'where am I?') ===");
+  console.log("\n=== TEST SUITE 53: Panel Headings Relate Clearly To Their Nav Button Wording (signposting: 'where am I?') ===");
   const dom = freshDom();
   const win = dom.window;
   await wait(300);
 
-  check("My Clients panel heading matches its nav button text exactly",
-    win.document.getElementById("mgrTitle").textContent === win.document.getElementById("navClients").textContent);
+  // Nav buttons stay short by design; headings are more descriptive but must still clearly
+  // start with or contain the nav button's core wording, so the connection stays obvious.
+  check("My Client Information heading starts with the nav button's 'My Client' wording",
+    win.document.getElementById("mgrTitle").textContent.startsWith("My Client"));
   check("Job Addresses panel heading matches its nav button text exactly",
     win.document.getElementById("addrMgrTitle").textContent === win.document.getElementById("navAddresses").textContent);
+  check("My Business Information heading relates clearly to the 'My Info' nav button (shares 'My' and the business-info concept)",
+    win.document.getElementById("settingsTitle").textContent.startsWith("My Business"));
 
-  // The other three intentionally extend rather than contradict their button's wording
+  // The other two intentionally extend rather than contradict their button's wording
   check("Uncompleted Invoices heading starts with the nav button's word",
     win.document.getElementById("incTitle").textContent.startsWith(win.document.getElementById("navUncompleted").textContent));
   check("Invoice History heading contains the nav button's word",
@@ -3232,6 +3236,78 @@ async function testBackButtonConsistencyAcrossApp() {
     win.document.getElementById("settingsBackBtn").textContent === "← Atrás, No Guardar");
 }
 
+async function testAddNewClientFromManagerPanel() {
+  console.log("\n=== TEST SUITE 60: Add New Client From My Clients Panel (new feature, batch item #2) ===");
+  const dom = freshDom();
+  const win = dom.window;
+  await wait(300);
+
+  win.eval(`showManager()`);
+  const addBtn = win.document.getElementById("btnAddNewClient");
+  check("My Clients panel has an 'Add new client' button", !!addBtn);
+  check("The button's English text reads '+ Add new client'", addBtn.textContent === "+ Add new client");
+
+  // Tapping it should leave the panel and launch the existing guided new-client flow
+  win.eval(`startNewClientFromManager()`);
+  check("Tapping Add new client closes the My Clients panel", win.document.getElementById("managerPanel").style.display !== "block");
+  check("Tapping Add new client clears the chat and starts the new-client flow",
+    win.eval('newClientState !== null && newClientState.step === "name"'));
+  const firstQuestionHtml = win.document.getElementById("chatBox").innerHTML;
+  check("The flow asks for the client's name first, same as the existing mid-invoice flow",
+    firstQuestionHtml.toLowerCase().includes("name") || firstQuestionHtml.toLowerCase().includes("nombre"));
+
+  // Walk through the full flow: name, address, email, phone, confirm
+  win.eval(`document.getElementById("userInput").value = "Maria Lopez"; sendMsg();`);
+  win.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // address
+  win.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // email
+  win.eval(`document.getElementById("userInput").value = "Skip"; sendMsg();`); // phone
+  win.eval(`document.getElementById("userInput").value = "Looks good"; sendMsg();`); // confirm
+
+  check("The client is actually saved to savedClients after completing the flow",
+    win.eval('savedClients.some(c => c.name === "Maria Lopez")'));
+
+  // Critically: when added from the manager (not mid-invoice), it must NOT try to continue
+  // building a phantom invoice — it should offer a clear way back to My Clients instead
+  check("addedFromManager flag is correctly reset to false after completion",
+    win.eval('addedFromManager') === false);
+  const completionChatHtml = win.document.getElementById("chatBox").innerHTML;
+  check("Completion message confirms the client was saved",
+    completionChatHtml.includes("Maria Lopez"));
+  check("Completion message references the CURRENT 'My Clients' tab name, not the stale old 'Clients' name",
+    completionChatHtml.includes("My Clients"));
+  const chipHtml = win.document.getElementById("chipArea").innerHTML;
+  check("A 'Back to My Clients' chip is shown after adding a client from the manager (no dead end)",
+    chipHtml.includes("My Clients"));
+  check("The flow did NOT try to hand off to the AI as if continuing an invoice (no phantom invoice continuation)",
+    win.eval('messages.length') === 0);
+
+  // Tapping the chip should correctly return to My Clients, now showing the new client
+  win.eval(`document.querySelector('#chipArea .chip').click()`);
+  check("Tapping the chip reopens the My Clients panel", win.document.getElementById("managerPanel").style.display === "block");
+  const clientListHtml = win.document.getElementById("clientList").innerHTML;
+  check("The newly-added client now appears in the list", clientListHtml.includes("Maria Lopez"));
+
+  // Regression: the EXISTING mid-invoice new-client flow must still correctly continue the
+  // invoice afterward (addedFromManager must not leak true into that unrelated path)
+  const dom2 = freshDom();
+  const win2 = dom2.window;
+  await wait(300);
+  win2.eval(`startNewClient()`); // the original mid-invoice entry point, NOT via the manager
+  check("The original mid-invoice flow does NOT set addedFromManager",
+    win2.eval('addedFromManager') === false);
+
+  // Edge case: backing out of the new-client flow (started from the manager) before finishing
+  // must reset addedFromManager, so it doesn't incorrectly leak into a later, unrelated flow
+  const dom3 = freshDom();
+  const win3 = dom3.window;
+  await wait(300);
+  win3.eval(`startNewClientFromManager()`);
+  check("addedFromManager is true while the flow is in progress", win3.eval('addedFromManager') === true);
+  win3.eval(`resetChat()`);
+  check("Backing out (resetChat) correctly resets addedFromManager to false",
+    win3.eval('addedFromManager') === false);
+}
+
 (async () => {
   try {
     await testBPLWFlow();
@@ -3294,6 +3370,7 @@ async function testBackButtonConsistencyAcrossApp() {
     await testPanelHeadingsMatchButtonColors();
     await testRedundantDocumentEmojiRemovedFromHeader();
     await testBackButtonConsistencyAcrossApp();
+    await testAddNewClientFromManagerPanel();
   } catch (e) {
     console.log("FATAL TEST ERROR:", e.message);
     console.log(e.stack);
